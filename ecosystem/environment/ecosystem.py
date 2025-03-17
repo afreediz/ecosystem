@@ -3,7 +3,7 @@
 import random
 import pygame
 from typing import List, Union
-from config.settings import WIDTH, HEIGHT, FONT_NAME, FONT_SIZE, FONT_COLOR, BACKGROUND_COLOR
+from config.settings import WIDTH, HEIGHT, FONT_NAME, FONT_SIZE, FONT_COLOR, BACKGROUND_COLOR, Entities_constraints
 from entities.plant import Plant
 from entities.sheep import Sheep
 from entities.fox import Fox
@@ -13,6 +13,7 @@ class Ecosystem:
     def __init__(self):
         self.entities: List[Union[Plant, Sheep, Fox]] = []
         self.statistics = Statistics(day=0, plants=0, sheep=0, foxes=0, climate=Climate.SUNNY, season=Season.SPRING)
+        self.constrains = Entities_constraints()
     
     def populate(self, num_plants=30, num_herbivores=10, num_carnivores=5):
         # Add initial plants
@@ -50,7 +51,7 @@ class Ecosystem:
         self.statistics.foxes = sum(1 for entity in self.entities if isinstance(entity, Fox))
         
         # Add some random plants occasionally
-        if random.random() < 0.1:
+        if self.statistics.day % 5 == 0 and self.statistics.plants < 50:
             x = random.randint(0, WIDTH)
             y = random.randint(0, HEIGHT)
             self.entities.append(Plant(x, y))
@@ -64,13 +65,17 @@ class Ecosystem:
 
         if current_day == 90:
             new_season = Season.SPRING
+            self.constrains.plants_max = 150
         elif current_day == 180:
             new_season = Season.SUMMER
+            self.constrains.plants_max = 100
         elif current_day == 270:
             new_season = Season.WINTER
+            self.constrains.plants_max = 50
         else:
             self.statistics.day = 0
             new_season = Season.AUTUMN
+            self.constrains.plants_max = 80
 
         if self.statistics.season != new_season:
             self.statistics.season = new_season

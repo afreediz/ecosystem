@@ -4,21 +4,28 @@ import random
 import math
 import pygame
 from entities.base import Entity
-from entities.sheep import Sheep
 from config.settings import WIDTH, HEIGHT, IMAGE_PATHS
 from config.parameters import FOX_PARAMS
+import random
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from environment.ecosystem import Ecosystem
 
 class Fox(Entity):
     def __init__(self, x, y):
-        super().__init__(x, y, IMAGE_PATHS['fox'], size=FOX_PARAMS['size'])
-        self.energy = FOX_PARAMS['initial_energy']
-        self.speed = random.uniform(*FOX_PARAMS['speed_range'])
-        self.reproduction_threshold = FOX_PARAMS['reproduction_threshold']
+        super().__init__(x, y, IMAGE_PATHS.fox, size=FOX_PARAMS.size)
+        self.id = random.randint(0, 10)
+        self.energy = FOX_PARAMS.initial_energy
+        self.speed = random.uniform(*FOX_PARAMS.speed_range)
+        self.reproduction_threshold = FOX_PARAMS.reproduction_threshold
         self.target = None
+        self.vision_range = 100
+        self.name = 'fox'
     
-    def update(self, ecosystem):
+    def update(self, ecosystem:'Ecosystem'):
         super().update()
-        self.energy -= FOX_PARAMS['energy_consumption_rate']
+        self.energy -= FOX_PARAMS.energy_consumption_rate
         
         # Find food if no target or target is dead
         if self.target is None or not self.target.alive:
@@ -41,18 +48,20 @@ class Fox(Entity):
         self.y = max(0, min(HEIGHT, self.y))
         
         # Reproduction
-        if self.energy > self.reproduction_threshold and random.random() < FOX_PARAMS['reproduction_chance']:
-            self.reproduce(ecosystem)
+        if self.energy > self.reproduction_threshold and random.random() < FOX_PARAMS.reproduction_chance:
+            if ecosystem.statistics.foxes < ecosystem.constrains.fox_max:
+                self.reproduce(ecosystem)
     
     def find_food(self, ecosystem):
         closest_distance = float('inf')
         for entity in ecosystem.entities:
-            if isinstance(entity, Sheep) and entity.alive:
+            if entity.name == 'sheep' and entity.alive:
                 distance = self.distance_to(entity)
-                if distance < closest_distance:
-                    closest_distance = distance
-                    self.target = entity
-    
+                if distance < self.vision_range:
+                    if distance < closest_distance:
+                        closest_distance = distance
+                        self.target = entity
+
     def move_towards(self, target):
         dx = target.x - self.x
         dy = target.y - self.y
@@ -70,6 +79,8 @@ class Fox(Entity):
             self.energy += energy_gain
             self.target.alive = False
             self.target = None
+            self.speed += 0.1
+            self.vision_range += 3
     
     def reproduce(self, ecosystem):
         # Create a new fox nearby
@@ -80,4 +91,4 @@ class Fox(Entity):
         
         new_fox = Fox(new_x, new_y)
         ecosystem.entities.append(new_fox)
-        self.energy -= FOX_PARAMS['reproduction_cost']
+        self.energy -= FOX_PARAMS.reproduction_cost

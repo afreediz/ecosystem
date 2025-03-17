@@ -5,20 +5,25 @@ import pygame
 from entities.base import Entity
 from config.settings import WIDTH, HEIGHT, IMAGE_PATHS
 from config.parameters import PLANT_PARAMS
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from environment.ecosystem import Ecosystem
 
 class Plant(Entity):
     def __init__(self, x, y):
-        super().__init__(x, y, IMAGE_PATHS['plant'], size=20)
-        self.energy = PLANT_PARAMS['initial_energy']
-        self.growth_rate = random.uniform(*PLANT_PARAMS['growth_rate_range'])
-        self.max_size = random.randint(*PLANT_PARAMS['max_size_range'])
-        self.reproduction_threshold = PLANT_PARAMS['reproduction_threshold']
+        super().__init__(x, y, IMAGE_PATHS.plant, size=20)
+        self.energy = PLANT_PARAMS.initial_energy
+        self.growth_rate = random.uniform(*PLANT_PARAMS.growth_rate_range)
+        self.max_size = random.randint(*PLANT_PARAMS.max_size_range)
+        self.reproduction_threshold = PLANT_PARAMS.reproduction_threshold
+        self.name = 'plant'
     
-    def update(self, ecosystem):
+    def update(self, ecosystem:'Ecosystem'):
         super().update()
         
         # Plants gain energy from sunlight
-        self.energy += PLANT_PARAMS['energy_gain_rate']
+        self.energy += PLANT_PARAMS.energy_gain_rate
         
         # Growth
         if self.size < self.max_size:
@@ -28,8 +33,9 @@ class Plant(Entity):
             self.rect = self.image.get_rect(center=(int(self.x), int(self.y)))
         
         # Reproduction
-        if self.energy > self.reproduction_threshold and random.random() < PLANT_PARAMS['reproduction_chance']:
-            self.reproduce(ecosystem)
+        if self.energy > self.reproduction_threshold and random.random() < PLANT_PARAMS.reproduction_chance:
+            if ecosystem.statistics.plants < ecosystem.constrains.plants_max:
+                self.reproduce(ecosystem)
     
     def reproduce(self, ecosystem):
         # Create a new plant nearby
@@ -40,4 +46,4 @@ class Plant(Entity):
         
         new_plant = Plant(new_x, new_y)
         ecosystem.entities.append(new_plant)
-        self.energy -= PLANT_PARAMS['reproduction_cost']
+        self.energy -= PLANT_PARAMS.reproduction_cost

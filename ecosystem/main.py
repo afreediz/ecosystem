@@ -4,7 +4,7 @@ import pygame
 import sys
 import random
 from config.settings import WIDTH, HEIGHT, FPS, BACKGROUND_COLOR
-from entities.plant import Plant
+from entities.sheep import Sheep
 from environment.ecosystem import Ecosystem
 
 # Initialize pygame
@@ -26,7 +26,7 @@ def main():
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 # Add a plant at mouse position when clicked
                 x, y = pygame.mouse.get_pos()
-                ecosystem.entities.append(Plant(x, y))
+                ecosystem.entities.append(Sheep(x, y))
         
         ecosystem.update()
         ecosystem.draw(screen)
