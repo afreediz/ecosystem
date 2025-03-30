@@ -2,9 +2,9 @@
 
 import pygame
 import sys
-import random
 from config.settings import WIDTH, HEIGHT, FPS, BACKGROUND_COLOR
 from entities.sheep import Sheep
+from entities.fox import Fox
 from environment.ecosystem import Ecosystem
 
 # Initialize pygame
@@ -23,10 +23,15 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                # Add a plant at mouse position when clicked
+
+            elif event.type == pygame.KEYDOWN:
                 x, y = pygame.mouse.get_pos()
-                ecosystem.entities.append(Sheep(x, y))
+                
+                if event.key == pygame.K_s:
+                    ecosystem.entities.append(Sheep(x, y))
+                if event.key == pygame.K_f:
+                    ecosystem.entities.append(Fox(x, y))
+                # Add a Sheep at mouse position when clicked
         
         ecosystem.update()
         ecosystem.draw(screen)

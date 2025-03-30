@@ -7,6 +7,7 @@ from config.settings import WIDTH, HEIGHT, FONT_NAME, FONT_SIZE, FONT_COLOR, BAC
 from entities.plant import Plant
 from entities.sheep import Sheep
 from entities.fox import Fox
+from environment.tile import TileMap
 from environment.views import Statistics, Climate, Season
 
 class Ecosystem:
@@ -14,6 +15,7 @@ class Ecosystem:
         self.entities: List[Union[Plant, Sheep, Fox]] = []
         self.statistics = Statistics(day=0, plants=0, sheep=0, foxes=0, climate=Climate.SUNNY, season=Season.SPRING)
         self.constrains = Entities_constraints()
+        self.tile_map = TileMap()
     
     def populate(self, num_plants=30, num_herbivores=10, num_carnivores=5):
         # Add initial plants
@@ -83,7 +85,7 @@ class Ecosystem:
     
     def draw(self, screen):
         # Draw background
-        screen.fill(BACKGROUND_COLOR)
+        self.tile_map.render(screen)
         
         # Draw all entities
         for entity in self.entities:

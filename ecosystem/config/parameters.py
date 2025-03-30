@@ -27,6 +27,9 @@ class SHEEP_PARAMS:
     reproduction_cost:int = 50
     energy_consumption_rate:float = 0.2
 
+class SHEEP_VISUAL_PARAMS:
+    pass
+
 # Fox parameters
 @dataclass
 class FOX_PARAMS:

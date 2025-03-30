@@ -11,9 +11,10 @@ class Entity:
         self.energy = 100
         self.age = 0
         self.alive = True
+        self.images_relative_path = 'assets/images/'
         
         # Load and scale image
-        self.original_image = pygame.image.load(image_path)
+        self.original_image = pygame.image.load(self.images_relative_path + image_path)
         self.image = pygame.transform.scale(self.original_image, (size, size))
         self.rect = self.image.get_rect(center=(int(x), int(y)))
     
