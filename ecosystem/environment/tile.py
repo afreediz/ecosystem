@@ -1,5 +1,25 @@
+import pytmx
 import pygame, csv
 from config.settings import TileImages, TILE_SIZE, TILE_MAP_LAYERS
+
+
+class TileTmxMap():
+    def __init__(self, tmx_file, tile_size=TILE_SIZE) -> None:
+        self.tile_size = tile_size
+        self.tmx_data = self.load_tmx_map(tmx_file)
+
+    def load_tmx_map(self, filename):
+        tmx_data = pytmx.load_pygame(filename)  # Load the TMX file
+        return tmx_data
+
+    def render_map(self, screen):
+        tmx_data = self.tmx_data
+        for layer in tmx_data.visible_layers:
+            if isinstance(layer, pytmx.TiledTileLayer):  # Only process tile layers
+                for x, y, gid in layer:
+                    tile = tmx_data.get_tile_image_by_gid(gid)
+                    if tile:
+                        screen.blit(tile, (x * tmx_data.tilewidth, y * tmx_data.tileheight))
 
 class TileMap():
     def __init__(self, tile_map_layers=TILE_MAP_LAYERS, tile_images=TileImages, tile_size=TILE_SIZE) -> None:
