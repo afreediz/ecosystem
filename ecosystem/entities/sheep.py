@@ -64,6 +64,43 @@ class Sheep(Entity):
                 if distance < closest_distance:
                     closest_distance = distance
                     self.target = entity
+
+    def find_all_opposite_genders(self, ecosystem):
+        mates = []
+        for entity in ecosystem.entities:
+            if isinstance(entity, Sheep) and entity.alive:
+                if self.gender != entity.gender:
+                    distance = self.distance_to(entity)
+                    if distance < self.vision_range:
+                        mates.append(entity)
+
+        return mates
+
+    def request_mates(self, ecosystem):
+        mates:list['Sheep'] = self.find_all_opposite_genders(self, ecosystem=ecosystem)
+
+        mates.sort(key=lambda x: self.distance_to(x))
+        for mate in mates:
+            acceptance = mate.accept_mate(self)
+            if acceptance and self.gender == 0:
+                self.reproduce(ecosystem=ecosystem)
+                self.energy -= SHEEP_PARAMS.reproduction_cost
+            else:
+                mate.reproduce(ecosystem=ecosystem)
+            break
+
+    def accept_mate(self, requesting_mate:'Sheep'):
+        # male logic
+        if self.gender == 1:
+            if self.energy > self.reproduction_threshold and random.random() < SHEEP_PARAMS.reproduction_chance:
+                return True
+            
+        # female logic
+        if self.gender == 0:
+            if self.energy < self.reproduction_threshold and random.random() < SHEEP_PARAMS.reproduction_chance:
+
+                self.energy -= SHEEP_PARAMS.reproduction_cost
+                return True
     
     def move_towards(self, target):
         dx = target.x - self.x

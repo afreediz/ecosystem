@@ -36,13 +36,13 @@ class Ecosystem:
             y = random.randint(0, HEIGHT)
             self.entities.append(Fox(x, y))
     
-    def update(self):
+    def update(self, stats):
         self.statistics.day += 1
         
         # Update all entities
         for entity in self.entities:
             if entity.alive:
-                entity.update(self)
+                entity.update(self, stats)
         
         # Remove dead entities
         self.entities = [entity for entity in self.entities if entity.alive]
