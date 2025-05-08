@@ -3,7 +3,10 @@ from dataclasses import dataclass
 
 # Display settings
 WIDTH, HEIGHT = 1400, 800
-FPS = 30
+FPS = 60
+FRAMES_PER_DAY = 30 # FPS/FRAMES_PER_DAY is the no. of seconds each day would last.
+DAYS_PER_MONTH = 20 # for seasons, monthy.
+MONTHS_PER_YEAR =  12 # for age
 BACKGROUND_COLOR = (240, 240, 220)  # Light beige for natural look
 
 TILE_SIZE = 16

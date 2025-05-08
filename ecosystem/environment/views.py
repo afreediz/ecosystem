@@ -13,9 +13,12 @@ class Season(str, Enum):
     AUTUMN = 'autumn'
 
 class Statistics(BaseModel):
-    day:int
     plants:int
     sheep:int
     foxes:int
     season:Season
     climate:Climate
+    frame:int
+    day:int
+    month:int
+    year:int

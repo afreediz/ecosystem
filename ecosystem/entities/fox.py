@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 class Fox(Entity):
     def __init__(self, x, y):
-        super().__init__(x, y, IMAGE_PATHS.fox, size=FOX_PARAMS.size)
+        super().__init__(x, y, IMAGE_PATHS.fox, size=FOX_PARAMS.size, max_age=FOX_PARAMS.max_age)
         self.id = random.randint(0, 10)
         self.energy = FOX_PARAMS.initial_energy
         self.speed = random.uniform(*FOX_PARAMS.speed_range)

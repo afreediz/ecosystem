@@ -4,7 +4,7 @@ import pygame
 import math
 
 class Entity:
-    def __init__(self, x, y, image_path, size=20):
+    def __init__(self, x, y, image_path, size=20, max_age=10):
         self.x = x
         self.y = y
         self.size = size
@@ -12,6 +12,7 @@ class Entity:
         self.age = 0
         self.alive = True
         self.images_relative_path = 'assets/images/'
+        self.max_age = max_age
         
         # Load and scale image
         self.original_image = pygame.image.load(self.images_relative_path + image_path)
@@ -21,7 +22,7 @@ class Entity:
     def update(self):
         self.age += 1
         self.energy -= 0.1  # Basic energy consumption
-        if self.energy <= 0:
+        if self.energy <= 0 or self.age > self.max_age:
             self.alive = False
         
         # Update rectangle position

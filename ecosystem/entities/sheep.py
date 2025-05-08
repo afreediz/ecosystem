@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 class Sheep(Entity):
     def __init__(self, x, y):
-        super().__init__(x, y, IMAGE_PATHS.sheep, size=SHEEP_PARAMS.size)
+        super().__init__(x, y, IMAGE_PATHS.sheep, size=SHEEP_PARAMS.size, max_age=SHEEP_PARAMS.max_age)
         self.energy = SHEEP_PARAMS.initial_energy
         self.speed = random.uniform(*SHEEP_PARAMS.speed_range)
         self.reproduction_threshold = SHEEP_PARAMS.reproduction_threshold

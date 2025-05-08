@@ -3,7 +3,7 @@
 import random
 import pygame
 from typing import List, Union
-from config.settings import WIDTH, HEIGHT, FONT_NAME, FONT_SIZE, FONT_COLOR, BACKGROUND_COLOR, Entities_constraints
+from config.settings import WIDTH, HEIGHT, FONT_NAME, FONT_SIZE, FONT_COLOR, FRAMES_PER_DAY, DAYS_PER_MONTH, MONTHS_PER_YEAR, Entities_constraints
 from entities.plant import Plant
 from entities.sheep import Sheep
 from entities.fox import Fox
@@ -13,7 +13,11 @@ from environment.views import Statistics, Climate, Season
 class Ecosystem:
     def __init__(self):
         self.entities: List[Union[Plant, Sheep, Fox]] = []
-        self.statistics = Statistics(day=0, plants=0, sheep=0, foxes=0, climate=Climate.SUNNY, season=Season.SPRING)
+        self.statistics = Statistics(
+            plants=0, sheep=0, foxes=0, 
+            climate=Climate.SUNNY, season=Season.SPRING,
+            frame=0, day=1, month=1, year=1
+            )
         self.constrains = Entities_constraints()
         self.tile_map = TileTmxMap(tmx_file=r'C:\Users\Afree\Desktop\AI\fun\ecosystem\ecosystem\data\tiles\map.tmx')
     
@@ -37,8 +41,23 @@ class Ecosystem:
             self.entities.append(Fox(x, y))
     
     def update(self):
-        self.statistics.day += 1
+        self.statistics.frame += 1
         
+        if self.statistics.frame % FRAMES_PER_DAY == 0:
+            self.statistics.day += 1
+        
+        if self.statistics.day % DAYS_PER_MONTH == 0:
+            self.statistics.day = 1
+            self.statistics.month += 1
+            self.change_season()
+
+        if self.statistics.month % MONTHS_PER_YEAR == 0:
+            self.statistics.month = 1
+            self.statistics.year += 1
+            for entity in self.entities:
+                if entity.alive:
+                    entity.age += 1
+
         # Update all entities
         for entity in self.entities:
             if entity.alive:
@@ -52,30 +71,28 @@ class Ecosystem:
         self.statistics.sheep = sum(1 for entity in self.entities if isinstance(entity, Sheep))
         self.statistics.foxes = sum(1 for entity in self.entities if isinstance(entity, Fox))
         
-        # Add some random plants occasionally
+        # Add some random plants per 5 days
         if self.statistics.day % 5 == 0 and self.statistics.plants < 50:
             x = random.randint(0, WIDTH)
             y = random.randint(0, HEIGHT)
             self.entities.append(Plant(x, y))
 
-        if self.statistics.day % 90 == 0:
-            self.change_season()
-
     def change_season(self):
-        current_day = self.statistics.day
         new_season = None
-
-        if current_day == 90:
+        month = self.statistics.month
+        quarter = MONTHS_PER_YEAR / 4
+        
+        # change season every 3 months
+        if month < quarter * 1:
             new_season = Season.SPRING
             self.constrains.plants_max = 150
-        elif current_day == 180:
+        elif month < quarter * 2:
             new_season = Season.SUMMER
             self.constrains.plants_max = 100
-        elif current_day == 270:
+        elif month < quarter * 3:
             new_season = Season.WINTER
             self.constrains.plants_max = 50
         else:
-            self.statistics.day = 0
             new_season = Season.AUTUMN
             self.constrains.plants_max = 80
 
@@ -93,6 +110,6 @@ class Ecosystem:
         
         # Draw statistics
         font = pygame.font.SysFont(FONT_NAME, FONT_SIZE)
-        stats_text = f"Day: {self.statistics.day} | Plants: {self.statistics.plants} | Sheep: {self.statistics.sheep} | Foxes: {self.statistics.foxes} | Season : {self.statistics.season.value}"
+        stats_text = f"DATE: {self.statistics.day}/{self.statistics.month}/{self.statistics.year} | Plants: {self.statistics.plants} | Sheep: {self.statistics.sheep} | Foxes: {self.statistics.foxes} | Season : {self.statistics.season.value}"
         text_surface = font.render(stats_text, True, FONT_COLOR)
         screen.blit(text_surface, (10, 10))
