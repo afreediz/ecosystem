@@ -3,7 +3,7 @@
 import random
 import math
 import pygame
-from entities.base import Entity
+from entities.base import Animal
 from entities.plant import Plant
 from config.settings import WIDTH, HEIGHT, IMAGE_PATHS
 from config.parameters import SHEEP_PARAMS
@@ -11,25 +11,26 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from environment.ecosystem import Ecosystem
+    from entities.plant import Plant
+    from entities.fox import Fox
 
-class Sheep(Entity):
+class Sheep(Animal):
     def __init__(self, x, y):
         super().__init__(x, y, IMAGE_PATHS.sheep, size=SHEEP_PARAMS.size)
         self.energy = SHEEP_PARAMS.initial_energy
         self.speed = random.uniform(*SHEEP_PARAMS.speed_range)
         self.reproduction_threshold = SHEEP_PARAMS.reproduction_threshold
-        self.target = None
-        self.vision_range = 70
+        self.vision_range = SHEEP_PARAMS.vision_range
+        self.energy_consumption_rate = SHEEP_PARAMS.energy_consumption_rate
         self.name = 'sheep'
     
     def update(self, ecosystem:'Ecosystem'):
         super().update()
-        self.energy -= SHEEP_PARAMS.energy_consumption_rate
-        
+
         predator = self.find_nearest_predator(ecosystem=ecosystem)
         
         if predator:
-            self.run_from_predators(target=predator)
+            self.run_from_predators(target=predator) #type:ignore
         else:
             # Find food if no target or target is dead
             if self.target is None or not self.target.alive:
@@ -56,7 +57,7 @@ class Sheep(Entity):
             if ecosystem.statistics.sheep < ecosystem.constrains.sheeps_max:
                 self.reproduce(ecosystem)
     
-    def find_food(self, ecosystem):
+    def find_food(self, ecosystem:'Ecosystem'):
         closest_distance = float('inf')
         for entity in ecosystem.entities:
             if isinstance(entity, Plant) and entity.alive:
@@ -65,7 +66,7 @@ class Sheep(Entity):
                     closest_distance = distance
                     self.target = entity
     
-    def move_towards(self, target):
+    def move_towards(self, target:'Plant'):
         dx = target.x - self.x
         dy = target.y - self.y
         distance = math.sqrt(dx**2 + dy**2)
@@ -87,7 +88,7 @@ class Sheep(Entity):
             
             self.target = None
     
-    def reproduce(self, ecosystem):
+    def reproduce(self, ecosystem:'Ecosystem'):
         # Create a new sheep nearby
         offset_x = random.randint(-20, 20)
         offset_y = random.randint(-20, 20)
@@ -98,7 +99,7 @@ class Sheep(Entity):
         ecosystem.entities.append(new_sheep)
         self.energy -= SHEEP_PARAMS.reproduction_cost
 
-    def run_from_predators(self, target):
+    def run_from_predators(self, target:'Fox'):
         dx = target.x - self.x
         dy = target.y - self.y
         distance = math.sqrt(dx**2 + dy**2)

@@ -2,8 +2,7 @@
 
 import random
 import math
-import pygame
-from entities.base import Entity
+from entities.base import Entity, Animal
 from config.settings import WIDTH, HEIGHT, IMAGE_PATHS
 from config.parameters import FOX_PARAMS
 import random
@@ -11,21 +10,21 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from environment.ecosystem import Ecosystem
+    from entities.sheep import Sheep
 
-class Fox(Entity):
+class Fox(Animal):
     def __init__(self, x, y):
         super().__init__(x, y, IMAGE_PATHS.fox, size=FOX_PARAMS.size)
         self.id = random.randint(0, 10)
         self.energy = FOX_PARAMS.initial_energy
         self.speed = random.uniform(*FOX_PARAMS.speed_range)
         self.reproduction_threshold = FOX_PARAMS.reproduction_threshold
-        self.target = None
-        self.vision_range = 100
+        self.energy_consumption_rate = FOX_PARAMS.energy_consumption_rate
+        self.vision_range = FOX_PARAMS.vision_range
         self.name = 'fox'
     
     def update(self, ecosystem:'Ecosystem'):
         super().update()
-        self.energy -= FOX_PARAMS.energy_consumption_rate
         
         # Find food if no target or target is dead
         if self.target is None or not self.target.alive:
@@ -33,7 +32,7 @@ class Fox(Entity):
         
         # Move towards food
         if self.target:
-            self.move_towards(self.target)
+            self.move_towards(self.target) #type:ignore
             
             # Check if close enough to eat
             if self.distance_to(self.target) < self.size/2 + self.target.size/2:
@@ -52,7 +51,7 @@ class Fox(Entity):
             if ecosystem.statistics.foxes < ecosystem.constrains.fox_max:
                 self.reproduce(ecosystem)
     
-    def find_food(self, ecosystem):
+    def find_food(self, ecosystem:'Ecosystem'):
         closest_distance = float('inf')
         for entity in ecosystem.entities:
             if entity.name == 'sheep' and entity.alive:
@@ -62,7 +61,7 @@ class Fox(Entity):
                         closest_distance = distance
                         self.target = entity
 
-    def move_towards(self, target):
+    def move_towards(self, target:'Sheep'):
         dx = target.x - self.x
         dy = target.y - self.y
         distance = math.sqrt(dx**2 + dy**2)
@@ -82,7 +81,7 @@ class Fox(Entity):
             self.speed += 0.1
             self.vision_range += 3
     
-    def reproduce(self, ecosystem):
+    def reproduce(self, ecosystem:'Ecosystem'):
         # Create a new fox nearby
         offset_x = random.randint(-30, 30)
         offset_y = random.randint(-30, 30)
