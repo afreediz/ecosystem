@@ -43,6 +43,7 @@ class Animal(Entity):
         self.vision_range = 30
         self.speed = 10
         self.target = None
+        self.memory = {}
         self.brain = self._get_brain()
 
     def _get_brain(self):

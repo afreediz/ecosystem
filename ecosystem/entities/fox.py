@@ -25,11 +25,21 @@ class Fox(Animal):
     
     def update(self, ecosystem:'Ecosystem'):
         super().update()
-        
-        # Find food if no target or target is dead
-        if self.target is None or not self.target.alive:
-            self.find_food(ecosystem)
-        
+
+        # make previous target None if its dead
+        if self.target is not None and self.target.alive is False:
+            self.target = None
+
+        target = self.find_food(ecosystem)
+
+        if self.target is not None and target is not None and self.target != target:
+            # if already target exist, but new target is much closer by priority
+            current_priority = 3
+            if self.distance_to(self.target) > self.distance_to(target)* (1/current_priority):
+                self.target = target
+        else:
+            self.target = target
+
         # Move towards food
         if self.target:
             self.move_towards(self.target) #type:ignore
@@ -53,13 +63,17 @@ class Fox(Animal):
     
     def find_food(self, ecosystem:'Ecosystem'):
         closest_distance = float('inf')
+
+        target = None
         for entity in ecosystem.entities:
             if entity.name == 'sheep' and entity.alive:
                 distance = self.distance_to(entity)
                 if distance < self.vision_range:
                     if distance < closest_distance:
                         closest_distance = distance
-                        self.target = entity
+                        target = entity
+        
+        return target
 
     def move_towards(self, target:'Sheep'):
         dx = target.x - self.x

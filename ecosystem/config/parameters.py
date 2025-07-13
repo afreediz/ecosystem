@@ -26,7 +26,7 @@ class SHEEP_PARAMS:
     reproduction_chance:float = 0.005
     reproduction_cost:int = 50
     energy_consumption_rate:float = 0.2
-    vision_range:float = 100
+    vision_range:float = 80
 
 class SHEEP_VISUAL_PARAMS:
     pass
@@ -36,7 +36,7 @@ class SHEEP_VISUAL_PARAMS:
 class FOX_PARAMS:
     initial_energy:int|float = 500
     size:int = 30
-    speed_range: Tuple[float, ...] = (1.0, 3.0)
+    speed_range: Tuple[float, ...] = (2.0, 3.0)
     reproduction_threshold:int = 200
     reproduction_chance:float = 0.003
     reproduction_cost:int = 70
