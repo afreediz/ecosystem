@@ -7,8 +7,8 @@ from typing import Tuple
 @dataclass
 class PLANT_PARAMS:
     initial_energy:int|float = 100
-    growth_rate_range:Tuple[float, ...] = (0.01, 0.05)
-    max_size_range:Tuple[int, ...] = (20, 40)
+    growth_rate:float = 0.03
+    max_size:float = 30
     reproduction_threshold:int = 50
     reproduction_chance:float = 0.01
     reproduction_cost:int =  30
@@ -21,24 +21,21 @@ class PLANT_PARAMS:
 class SHEEP_PARAMS:
     initial_energy: int|float = 120
     size:int = 25
-    speed_range: Tuple[float, ...] = (1.5, 4.0)
+    speed:float = 2
     reproduction_threshold:int = 150
     reproduction_chance:float = 0.005
     reproduction_cost:int = 50
     energy_consumption_rate:float = 0.2
-    vision_range:float = 80
-
-class SHEEP_VISUAL_PARAMS:
-    pass
+    vision_range:int = 80
 
 # Fox parameters
 @dataclass
 class FOX_PARAMS:
     initial_energy:int|float = 500
     size:int = 30
-    speed_range: Tuple[float, ...] = (2.0, 3.0)
+    speed:float = 3
     reproduction_threshold:int = 200
     reproduction_chance:float = 0.003
     reproduction_cost:int = 70
     energy_consumption_rate:float = 0.7
-    vision_range:float = 100
+    vision_range:int = 120

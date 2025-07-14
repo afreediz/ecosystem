@@ -3,8 +3,22 @@ from dataclasses import dataclass
 
 # Display settings
 WIDTH, HEIGHT = 1400, 800
-FPS = 30
+FPS = 15
 BACKGROUND_COLOR = (240, 240, 220)  # Light beige for natural look
+
+# population
+SHEEP = 3
+FOX = 1
+PLANT = 5
+
+#seasonal plants
+SPRING = 7
+AUTUMUN = 5
+WINTER = 2
+SUMMER = 3
+
+# brain params
+largest_entity_size:int = 30 # to create vision blocks to minimize num neurons needed for vision
 
 TILE_SIZE = 16
 TILE_MAP_LAYERS = {

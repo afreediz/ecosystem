@@ -15,16 +15,17 @@ if TYPE_CHECKING:
 class Fox(Animal):
     def __init__(self, x, y):
         super().__init__(x, y, IMAGE_PATHS.fox, size=FOX_PARAMS.size)
-        self.id = random.randint(0, 10)
         self.energy = FOX_PARAMS.initial_energy
-        self.speed = random.uniform(*FOX_PARAMS.speed_range)
+        self.speed = FOX_PARAMS.speed
         self.reproduction_threshold = FOX_PARAMS.reproduction_threshold
         self.energy_consumption_rate = FOX_PARAMS.energy_consumption_rate
         self.vision_range = FOX_PARAMS.vision_range
         self.name = 'fox'
+
+        self._init()
     
     def update(self, ecosystem:'Ecosystem'):
-        super().update()
+        super().update(ecosystem=ecosystem)
 
         # make previous target None if its dead
         if self.target is not None and self.target.alive is False:

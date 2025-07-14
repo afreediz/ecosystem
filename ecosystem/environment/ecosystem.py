@@ -17,6 +17,50 @@ class Ecosystem:
         self.constrains = Entities_constraints()
         self.tile_map = TileTmxMap(tmx_file=r'C:\Users\Afree\Desktop\AI\fun\ecosystem\ecosystem\data\tiles\map.tmx')
     
+    def check_entity_presense(self, bouding_box:tuple, exclude_id:int) -> int:
+        x, y, width, height = bouding_box
+
+        entities_present = []
+        for entity in self.entities:
+            if x <= entity.x <= (x + width) and y <= entity.y <= ( y + height) and entity.id != exclude_id:
+                entities_present.append(entity)
+
+        # sheep_only=1, sheep_and_fox=2, sheep_and_plant=3, fox_only=4, fox_and_plant=5, plant_only=6
+        sheep = False
+        fox = False
+        plant = False
+
+        for entity in entities_present:
+            if isinstance(entity, Sheep):
+                sheep = True
+            elif isinstance(entity, Fox):
+                fox = True
+            elif isinstance(entity, Plant):
+                plant = True
+            
+        if sheep and fox:
+            return 2
+        elif sheep and plant:
+            return 3
+        elif fox and plant:
+            return 5
+        elif sheep:
+            return 1
+        elif fox:
+            return 4
+        elif plant:
+            return 6
+        else:
+            return 0
+
+    def get_largest_entity_size(self) -> float:
+        largest_size = 0
+        for entity in self.entities:
+            if entity.size > largest_size:
+                largest_size = entity.size
+
+        return largest_size
+
     def populate(self, num_plants=30, num_herbivores=10, num_carnivores=5):
         # Add initial plants
         for _ in range(num_plants):

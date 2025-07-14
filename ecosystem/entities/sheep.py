@@ -18,14 +18,16 @@ class Sheep(Animal):
     def __init__(self, x, y):
         super().__init__(x, y, IMAGE_PATHS.sheep, size=SHEEP_PARAMS.size)
         self.energy = SHEEP_PARAMS.initial_energy
-        self.speed = random.uniform(*SHEEP_PARAMS.speed_range)
+        self.speed = SHEEP_PARAMS.speed
         self.reproduction_threshold = SHEEP_PARAMS.reproduction_threshold
         self.vision_range = SHEEP_PARAMS.vision_range
         self.energy_consumption_rate = SHEEP_PARAMS.energy_consumption_rate
         self.name = 'sheep'
+
+        self._init()
     
     def update(self, ecosystem:'Ecosystem'):
-        super().update()
+        super().update(ecosystem=ecosystem)
 
         predator = self.find_nearest_predator(ecosystem=ecosystem)
         

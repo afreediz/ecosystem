@@ -14,8 +14,8 @@ class Plant(Entity):
     def __init__(self, x, y):
         super().__init__(x, y, IMAGE_PATHS.plant, size=20)
         self.energy = PLANT_PARAMS.initial_energy
-        self.growth_rate = random.uniform(*PLANT_PARAMS.growth_rate_range)
-        self.max_size = random.randint(*PLANT_PARAMS.max_size_range)
+        self.growth_rate = PLANT_PARAMS.growth_rate
+        self.max_size = PLANT_PARAMS.max_size
         self.reproduction_threshold = PLANT_PARAMS.reproduction_threshold
         self.name = 'plant'
     

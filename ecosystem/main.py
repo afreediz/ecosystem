@@ -2,7 +2,7 @@
 
 import pygame
 import sys
-from config.settings import WIDTH, HEIGHT, FPS, BACKGROUND_COLOR
+from config.settings import WIDTH, HEIGHT, FPS, BACKGROUND_COLOR, FOX, SHEEP, PLANT
 from entities.sheep import Sheep
 from entities.fox import Fox
 from environment.ecosystem import Ecosystem
@@ -16,7 +16,7 @@ clock = pygame.time.Clock()
 def main():
     # Create and populate ecosystem
     ecosystem = Ecosystem()
-    ecosystem.populate(num_plants=30, num_herbivores=15, num_carnivores=5)
+    ecosystem.populate(num_plants=PLANT, num_herbivores=SHEEP, num_carnivores=FOX)
     
     running = True
     while running:
