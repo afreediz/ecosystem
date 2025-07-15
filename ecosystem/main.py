@@ -28,7 +28,9 @@ def main():
                 x, y = pygame.mouse.get_pos()
                 
                 if event.key == pygame.K_s:
-                    ecosystem.entities.append(Sheep(x, y))
+                    sheep = Sheep(x, y, debug=True)
+                    sheep.monitor_chance = 20
+                    ecosystem.entities.append(sheep)
                 if event.key == pygame.K_f:
                     ecosystem.entities.append(Fox(x, y))
                 # Add a Sheep at mouse position when clicked

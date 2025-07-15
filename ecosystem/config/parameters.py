@@ -3,6 +3,16 @@ from pydantic import BaseModel
 from dataclasses import dataclass
 from typing import Tuple
 
+@dataclass
+class ENTITY_IN_PRECEPTION:
+    empty = 0
+    plant = 1
+    sheep = 2
+    fox = 3
+    sheep_and_fox = 4
+    sheep_and_plant = 5
+    fox_and_plant = 6
+
 # Plant parameters
 @dataclass
 class PLANT_PARAMS:

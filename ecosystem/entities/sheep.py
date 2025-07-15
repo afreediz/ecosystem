@@ -6,7 +6,7 @@ import pygame
 from entities.base import Animal
 from entities.plant import Plant
 from config.settings import WIDTH, HEIGHT, IMAGE_PATHS
-from config.parameters import SHEEP_PARAMS
+from config.parameters import SHEEP_PARAMS, ENTITY_IN_PRECEPTION
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -15,13 +15,14 @@ if TYPE_CHECKING:
     from entities.fox import Fox
 
 class Sheep(Animal):
-    def __init__(self, x, y):
+    def __init__(self, x, y, debug=False):
         super().__init__(x, y, IMAGE_PATHS.sheep, size=SHEEP_PARAMS.size)
         self.energy = SHEEP_PARAMS.initial_energy
         self.speed = SHEEP_PARAMS.speed
         self.reproduction_threshold = SHEEP_PARAMS.reproduction_threshold
         self.vision_range = SHEEP_PARAMS.vision_range
         self.energy_consumption_rate = SHEEP_PARAMS.energy_consumption_rate
+        self.debug = debug
         self.name = 'sheep'
 
         self._init()
@@ -30,7 +31,7 @@ class Sheep(Animal):
         super().update(ecosystem=ecosystem)
 
         predator = self.find_nearest_predator(ecosystem=ecosystem)
-        
+
         if predator:
             self.run_from_predators(target=predator) #type:ignore
         else:
@@ -58,6 +59,12 @@ class Sheep(Animal):
         if self.energy > self.reproduction_threshold and random.random() < SHEEP_PARAMS.reproduction_chance:
             if ecosystem.statistics.sheep < ecosystem.constrains.sheeps_max:
                 self.reproduce(ecosystem)
+
+        if random.randint(1, 100) < self.monitor_chance:
+            if self.brain is not None:
+                self.brain.show_perception()
+                res = self.brain.is_entity_near(entity_preception_number=ENTITY_IN_PRECEPTION.plant)
+                print('PLANT FOUND AT : ', res)
     
     def find_food(self, ecosystem:'Ecosystem'):
         closest_distance = float('inf')

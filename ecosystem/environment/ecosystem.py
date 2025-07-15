@@ -4,6 +4,7 @@ import random
 import pygame
 from typing import List, Union
 from config.settings import WIDTH, HEIGHT, FONT_NAME, FONT_SIZE, FONT_COLOR, BACKGROUND_COLOR, Entities_constraints
+from config.parameters import ENTITY_IN_PRECEPTION
 from entities.plant import Plant
 from entities.sheep import Sheep
 from entities.fox import Fox
@@ -25,7 +26,6 @@ class Ecosystem:
             if x <= entity.x <= (x + width) and y <= entity.y <= ( y + height) and entity.id != exclude_id:
                 entities_present.append(entity)
 
-        # sheep_only=1, sheep_and_fox=2, sheep_and_plant=3, fox_only=4, fox_and_plant=5, plant_only=6
         sheep = False
         fox = False
         plant = False
@@ -38,28 +38,21 @@ class Ecosystem:
             elif isinstance(entity, Plant):
                 plant = True
             
+        # sheep_only=1, sheep_and_fox=2, sheep_and_plant=3, fox_only=4, fox_and_plant=5, plant_only=6
         if sheep and fox:
-            return 2
+            return ENTITY_IN_PRECEPTION.sheep_and_fox
         elif sheep and plant:
-            return 3
+            return ENTITY_IN_PRECEPTION.sheep_and_plant
         elif fox and plant:
-            return 5
+            return ENTITY_IN_PRECEPTION.fox_and_plant
         elif sheep:
-            return 1
+            return ENTITY_IN_PRECEPTION.sheep
         elif fox:
-            return 4
+            return ENTITY_IN_PRECEPTION.fox
         elif plant:
-            return 6
+            return ENTITY_IN_PRECEPTION.plant
         else:
-            return 0
-
-    def get_largest_entity_size(self) -> float:
-        largest_size = 0
-        for entity in self.entities:
-            if entity.size > largest_size:
-                largest_size = entity.size
-
-        return largest_size
+            return ENTITY_IN_PRECEPTION.empty
 
     def populate(self, num_plants=30, num_herbivores=10, num_carnivores=5):
         # Add initial plants
