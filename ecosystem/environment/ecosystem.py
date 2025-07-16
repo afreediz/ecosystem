@@ -18,7 +18,7 @@ class Ecosystem:
         self.constrains = Entities_constraints()
         self.tile_map = TileTmxMap(tmx_file=r'C:\Users\Afree\Desktop\AI\fun\ecosystem\ecosystem\data\tiles\map.tmx')
     
-    def check_entity_presense(self, bouding_box:tuple, exclude_id:int) -> int:
+    def check_entity_presense(self, bouding_box:tuple, exclude_id) -> int:
         x, y, width, height = bouding_box
 
         entities_present = []

@@ -36,7 +36,7 @@ class SHEEP_PARAMS:
     reproduction_chance:float = 0.005
     reproduction_cost:int = 50
     energy_consumption_rate:float = 0.2
-    vision_range:int = 80
+    vision_range:int = 100
 
 # Fox parameters
 @dataclass
@@ -48,4 +48,4 @@ class FOX_PARAMS:
     reproduction_chance:float = 0.003
     reproduction_cost:int = 70
     energy_consumption_rate:float = 0.7
-    vision_range:int = 120
+    vision_range:int = 180

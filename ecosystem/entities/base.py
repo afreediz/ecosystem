@@ -4,7 +4,7 @@ import pygame
 import math
 import random
 import numpy as np
-from config.settings import largest_entity_size
+from config.settings import smallest_entity_size
 from typing import TYPE_CHECKING
 from collections import deque
 from uuid import uuid4
@@ -52,136 +52,84 @@ class Brain:
         self.id = id
         self.body = body
         self.vision_range = body.vision_range
-        self.vision_block_size = int(4*body.vision_range**2 / largest_entity_size**2)
-        self.block_length = int(math.sqrt(self.vision_block_size))
-        self.preception = np.zeros(self.vision_block_size)
+        
+        # matrix width
+        num_of_blocks = int((2 * self.vision_range) / smallest_entity_size)
+        self.perception = np.zeros((num_of_blocks, num_of_blocks))
         self.memory = {}
 
         print(f"""BRAIN({id}) : 
             vision_range     : {body.vision_range}
-            vision_block_size: {self.vision_block_size}
-            block_length     : {self.block_length}
-            perception       : {len(self.preception)}""")
+            perception       : {self.perception.shape}""")
 
     def update_preception(self, x, y, ecosystem: 'Ecosystem') -> None:
-        half_vision = self.vision_range
-        grid_size = self.block_length  # number of blocks per row/col (square grid)
-        step = (2 * self.vision_range) / grid_size  # size of one block in pixels
+        self.perception[:] = 0  # Optional: reset
+        matrix = self.perception
 
-        self.perception = np.zeros(self.vision_block_size)  # Optional: reset
-
-        preception_index = 0
-        for row in range(grid_size):
-            for col in range(grid_size):
-                # Compute the top-left corner of the current block
-                box_x = int(x - half_vision + col * step)
-                box_y = int(y - half_vision + row * step)
-                bounding_box = (box_x, box_y, step, step)
-
-                if preception_index < len(self.perception):
-                    self.perception[preception_index] = ecosystem.check_entity_presense(
-                        bouding_box=bounding_box, exclude_id=self.id
-                    )
-                    preception_index += 1
-
-    def show_perception(self, external_preception=None) -> None:
-        perception = external_preception if external_preception else self.perception
-        size = len(perception)
-        width = int(math.sqrt(size))
-
-        if width * width != size:
-            width += 1  # Try to accommodate overflow visually
-
-        if external_preception is not None:
-            print("DUMMY")
-        print(f"Perception Grid ({width} x {width}):")
-        for i in range(width):
-            for j in range(width):
-                idx = j + i * width
-                if idx < size:
-                    value = perception[idx]
-                    # Optional: format value as int if it's categorical (e.g., 0=empty, 1=plant, 2=fox)
-                    print(f"{int(value):2}", end=" ")
-                else:
-                    print(" .", end=" ")  # Empty cell for overflow
-            print()  # Newline after each row
-
-    # def get_nearest_entity(self, entity_type:Entity):
-    #     pos_x, pos_y = self.body.x, self.body.y
-
-    #     # radial outward check for given entity
-    #     size = len(self.preception)
-    #     width = int(math.sqrt(size))
-    #     radial_width = int(width / 2)
-    #     block_length = self.block_length
-
-    #     for i in range(radial_width):
-    #         lower_x, lower_y = pos_x - self.block_length * i, pos_y - self.block_length * i
-    #         upper_x, upper_y = pos_x + self.block_length * i, pos_y + self.block_length * i
-
-    #         for j in range(width):
-    #             idx = j + i * width
-
-    def is_entity_near(self, entity_preception_number: int) -> int|None:
-        """
-        Find the nearest entity from the center of the flattened matrix using BFS.
+        num_of_blocks = self.perception.shape[0]
+        lower_x, lower_y = self.body.x - num_of_blocks*smallest_entity_size, self.body.y - num_of_blocks*smallest_entity_size
         
-        Args:
-            entity_preception_number: The value to search for in the matrix
-            
-        Returns:
-            int: 1D index of nearest entity, or None if not found
-        """
-        matrix = self.preception
-        size = len(matrix)
-        width = int(math.sqrt(size))
-        rows = cols = width
-        
-        # Helper functions to convert between 1D and 2D indices
-        def to_1d_index(row, col):
-            return row * width + col
+        for x in range(num_of_blocks):
+            for y in range(num_of_blocks):
+                current_x = lower_x + num_of_blocks*x
+                current_y = lower_y + num_of_blocks*y
+
+                matrix[x][y] = ecosystem.check_entity_presense(
+                    bouding_box=(current_x, current_y, num_of_blocks, num_of_blocks), exclude_id=self.body.id
+                )
+
+        self.perception = matrix
+
+    def show_perception(self) -> None:
+        print(self.perception)
+
+    def get_nearest_entity(self, entity_pereception_num:int):
+        matrix = self.perception
+        n = matrix.shape[0]
         
         # Find center position
-        center_row = rows // 2
-        center_col = cols // 2
+        center = n // 2
         
-        # BFS setup
-        queue = deque([(center_row, center_col, 0)])  # (row, col, distance)
-        visited = set()
-        visited.add((center_row, center_col))
+        # Get all positions where value is 1
+        pos = np.where(matrix == entity_pereception_num)        
+        if len(pos[0]) == 0:
+            return None  # Not found
+        
+        self.show_perception()
 
-        dummy_visited = [0 for _ in range(len(matrix))]
+        # Calculate distances from center to all 1s
+        distances = []
+        positions = []
         
-        # Directions: up, down, left, right
-        directions = [(-1, 0), (1, 0), (0, -1), (0, 1), (1,1), (1, -1), (-1,1), (-1, -1)]
+        for i in range(len(pos[0])):
+            row, col = pos[0][i], pos[1][i]
+            # Calculate Euclidean distance from center
+            distance = np.sqrt((row - center)**2 + (col - center)**2)
+            distances.append(distance)
+            positions.append((row, col))
         
-        while queue:
-            row, col, dist = queue.popleft()
-            
-            # Check all 4 directions
-            for dr, dc in directions:
-                new_row, new_col = row + dr, col + dc
-                
-                # Check bounds
-                if 0 <= new_row < rows and 0 <= new_col < cols:
-                    if (new_row, new_col) not in visited:
-                        visited.add((new_row, new_col))
-                        
-                        # Convert to 1D index to access flattened matrix
-                        flat_index = to_1d_index(new_row, new_col)
-                        
-                        # If we found the entity, return its 1D index
-                        dummy_visited[flat_index] = 1
-                        if matrix[flat_index] == entity_preception_number:
-                            return flat_index
-                        
-                        # Add to queue for further exploration
-                        queue.append((new_row, new_col, dist + 1))
-        
-        # No entity found in the matrix
-        self.show_perception(external_preception=dummy_visited)
-        return None
+        # Find position with minimum distance
+        min_idx = np.argmin(distances)
+        min_dist_pos = positions[min_idx]
 
+        if not min_dist_pos:
+            return None
+        
+        # signed entity position from matrice
+        min_row, min_col = min_dist_pos
+        if min_row < center:
+            entity_x = -min_row*smallest_entity_size
+        else:
+            entity_x = min_row*smallest_entity_size
+
+        if min_col < center:
+            entity_y = -min_col*smallest_entity_size
+        else:
+            entity_y = min_col*smallest_entity_size
+
+        print(F"RETURNING {entity_x + (smallest_entity_size/2), entity_y + (smallest_entity_size/2)}")
+        # return unit block center instead of top-left
+        return entity_x + (smallest_entity_size/2), entity_y + (smallest_entity_size/2)
 
 class Animal(Entity):
     def __init__(self, x, y, image_path, size=20):
@@ -198,6 +146,9 @@ class Animal(Entity):
 
         if self.brain is not None:
             self.brain.update_preception(x=self.x, y=self.y, ecosystem=ecosystem)
+
+            # if random.randint(1, 20) < 2:
+            #     self.brain.show_perception()
 
     def _init(self):
         self._create_brain()

@@ -7,7 +7,7 @@ from entities.base import Animal
 from entities.plant import Plant
 from config.settings import WIDTH, HEIGHT, IMAGE_PATHS
 from config.parameters import SHEEP_PARAMS, ENTITY_IN_PRECEPTION
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Tuple, Optional
 
 if TYPE_CHECKING:
     from environment.ecosystem import Ecosystem
@@ -24,6 +24,7 @@ class Sheep(Animal):
         self.energy_consumption_rate = SHEEP_PARAMS.energy_consumption_rate
         self.debug = debug
         self.name = 'sheep'
+        self.target_point:Optional[Tuple[int, int]] = None
 
         self._init()
     
@@ -36,16 +37,16 @@ class Sheep(Animal):
             self.run_from_predators(target=predator) #type:ignore
         else:
             # Find food if no target or target is dead
-            if self.target is None or not self.target.alive:
+            if self.target_point is None:
                 self.find_food(ecosystem)
             
             # Move towards food
-            if self.target:
-                self.move_towards(self.target)
+            if self.target_point is not None:
+                self.move_towards_point(self.target_point)
                 
                 # Check if close enough to eat
-                if self.distance_to(self.target) < self.size/2 + self.target.size/2:
-                    self.eat()
+                # if self.distance_to(self.target) < self.size/2 + self.target.size/2:
+                #     self.eat()
             else:
                 # Random movement if no food found
                 self.x += random.uniform(-self.speed, self.speed)
@@ -62,19 +63,33 @@ class Sheep(Animal):
 
         if random.randint(1, 100) < self.monitor_chance:
             if self.brain is not None:
-                self.brain.show_perception()
-                res = self.brain.is_entity_near(entity_preception_number=ENTITY_IN_PRECEPTION.plant)
-                print('PLANT FOUND AT : ', res)
+                res = self.brain.get_nearest_entity(entity_pereception_num=ENTITY_IN_PRECEPTION.plant)
+    
+    # def find_food(self, ecosystem:'Ecosystem'):
+    #     closest_distance = float('inf')
+    #     for entity in ecosystem.entities:
+    #         if isinstance(entity, Plant) and entity.alive:
+    #             distance = self.distance_to(entity)
+    #             if distance < closest_distance:
+    #                 closest_distance = distance
+    #                 self.target = entity
     
     def find_food(self, ecosystem:'Ecosystem'):
-        closest_distance = float('inf')
-        for entity in ecosystem.entities:
-            if isinstance(entity, Plant) and entity.alive:
-                distance = self.distance_to(entity)
-                if distance < closest_distance:
-                    closest_distance = distance
-                    self.target = entity
-    
+        food = self.brain.get_nearest_entity(ENTITY_IN_PRECEPTION.plant) #type:ignore
+        if food:
+            self.target_point = food
+
+    def move_towards_point(self, target:Tuple[int, int]):
+        dx = target[0] - self.x
+        dy = target[1] - self.y
+        distance = math.sqrt(dx**2 + dy**2)
+        
+        if distance > 0:
+            dx = dx / distance * self.speed
+            dy = dy / distance * self.speed
+            self.x += dx
+            self.y += dy
+
     def move_towards(self, target:'Plant'):
         dx = target.x - self.x
         dy = target.y - self.y

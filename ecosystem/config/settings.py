@@ -18,7 +18,7 @@ WINTER = 2
 SUMMER = 3
 
 # brain params
-largest_entity_size:int = 30 # to create vision blocks to minimize num neurons needed for vision
+smallest_entity_size:int = 30 # to create vision blocks to minimize num neurons needed for vision
 
 TILE_SIZE = 16
 TILE_MAP_LAYERS = {
