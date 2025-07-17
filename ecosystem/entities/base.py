@@ -128,7 +128,7 @@ class Brain:
 
         # print(F"RETURNING {entity_x + (smallest_entity_size/2), entity_y + (smallest_entity_size/2)}")
         # return unit block center instead of top-left
-        return entity_x + (smallest_entity_size/2), entity_y + (smallest_entity_size/2)
+        return self.body.x + entity_x + (smallest_entity_size/2), self.body.y + entity_y + (smallest_entity_size/2)
 
 class Animal(Entity):
     def __init__(self, x, y, image_path, size=20):

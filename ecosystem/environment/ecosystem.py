@@ -163,9 +163,9 @@ class Ecosystem:
             perception_surface.fill((0, 0, 0))  # Fill background black
 
             # Draw perception matrix
-            for y in range(perception.shape[0]):
-                for x in range(perception.shape[1]):
-                    val = perception[y, x]
+            for x in range(perception.shape[0]):
+                for y in range(perception.shape[1]):
+                    val = perception[x, y]
                     color = GRAY
                     if val == 'prey':
                         color = GREEN
