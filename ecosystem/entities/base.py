@@ -130,6 +130,13 @@ class Brain:
         # return unit block center instead of top-left
         return self.body.x + entity_x + (smallest_entity_size/2), self.body.y + entity_y + (smallest_entity_size/2)
 
+    def distance_to_point(self, point:tuple) -> float:
+        target_x, target_y = point
+        center = self.perception.shape[0] // 2
+
+        distance = np.sqrt((target_x - center)**2 + (target_y - center)**2)
+        return distance * smallest_entity_size
+
 class Animal(Entity):
     def __init__(self, x, y, image_path, size=20):
         super().__init__(x, y, image_path, size)

@@ -41,12 +41,11 @@ class Sheep(Animal):
                 self.find_food(ecosystem)
             
             # Move towards food
-            if self.target_point is not None:
+            if self.target_point is not None and self.brain is not None:
                 self.move_towards_point(self.target_point)
                 
-                # Check if close enough to eat
-                # if self.distance_to(self.target) < self.size/2 + self.target.size/2:
-                #     self.eat()
+                if self.brain.distance_to_point(self.target_point) < self.size/2:
+                    self.eat()
             else:
                 # Random movement if no food found
                 self.x += random.uniform(-self.speed, self.speed)
@@ -107,15 +106,17 @@ class Sheep(Animal):
             self.y += dy
     
     def eat(self):
-        if self.target and self.target.alive:
-            energy_gain = min(25, self.target.energy)
-            self.energy += energy_gain
-            self.target.energy -= energy_gain
+        print("Ate target at ", self.target)
+        self.target = None
+        # if self.target and self.target.alive:
+        #     energy_gain = min(25, self.target.energy)
+        #     self.energy += energy_gain
+        #     self.target.energy -= energy_gain
             
-            if self.target.energy <= 0:
-                self.target.alive = False
+        #     if self.target.energy <= 0:
+        #         self.target.alive = False
             
-            self.target = None
+        #     self.target = None
     
     def reproduce(self, ecosystem:'Ecosystem'):
         # Create a new sheep nearby
