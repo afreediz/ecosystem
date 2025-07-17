@@ -3,7 +3,7 @@
 import random
 import pygame
 from typing import List, Union
-from config.settings import WIDTH, HEIGHT, FONT_NAME, FONT_SIZE, FONT_COLOR, BACKGROUND_COLOR, Entities_constraints
+from config.settings import WIDTH, HEIGHT, FONT_NAME, FONT_SIZE, FONT_COLOR, DEBUGGER_WIDTH, smallest_entity_size, Entities_constraints
 from config.parameters import ENTITY_IN_PRECEPTION
 from entities.plant import Plant
 from entities.sheep import Sheep
@@ -11,12 +11,20 @@ from entities.fox import Fox
 from environment.tile import TileTmxMap
 from environment.views import Statistics, Climate, Season
 
+black_area = pygame.Surface((DEBUGGER_WIDTH, HEIGHT))
+black_area.fill((0,0,0))
+GRAY = (100, 100, 100)
+GREEN = (0, 255, 0)
+RED = (255, 0, 0)
+cell_size = min(DEBUGGER_WIDTH, smallest_entity_size)
+
 class Ecosystem:
     def __init__(self):
         self.entities: List[Union[Plant, Sheep, Fox]] = []
         self.statistics = Statistics(day=0, plants=0, sheep=0, foxes=0, climate=Climate.SUNNY, season=Season.SPRING)
         self.constrains = Entities_constraints()
         self.tile_map = TileTmxMap(tmx_file=r'C:\Users\Afree\Desktop\AI\fun\ecosystem\ecosystem\data\tiles\map.tmx')
+        self.debug = {}
     
     def check_entity_presense(self, bouding_box:tuple, exclude_id) -> int:
         x, y, width, height = bouding_box
@@ -57,22 +65,22 @@ class Ecosystem:
     def populate(self, num_plants=30, num_herbivores=10, num_carnivores=5):
         # Add initial plants
         for _ in range(num_plants):
-            x = random.randint(0, WIDTH)
+            x = random.randint(0, WIDTH-DEBUGGER_WIDTH)
             y = random.randint(0, HEIGHT)
             self.entities.append(Plant(x, y))
         
         # Add initial herbivores (sheep)
         for _ in range(num_herbivores):
-            x = random.randint(0, WIDTH)
+            x = random.randint(0, WIDTH-DEBUGGER_WIDTH)
             y = random.randint(0, HEIGHT)
             self.entities.append(Sheep(x, y))
         
         # Add initial carnivores (foxes)
         for _ in range(num_carnivores):
-            x = random.randint(0, WIDTH)
+            x = random.randint(0, WIDTH-DEBUGGER_WIDTH)
             y = random.randint(0, HEIGHT)
             self.entities.append(Fox(x, y))
-    
+
     def update(self):
         self.statistics.day += 1
         
@@ -84,6 +92,13 @@ class Ecosystem:
         # Remove dead entities
         self.entities = [entity for entity in self.entities if entity.alive]
         
+        alive_ids = [x.id for x in self.entities]
+        new_debug = {}
+        for key, value in self.debug.items():
+            if key in alive_ids:
+                new_debug[key] = value
+        self.debug = new_debug
+        
         # Update statistics
         self.statistics.plants = sum(1 for entity in self.entities if isinstance(entity, Plant))
         self.statistics.sheep = sum(1 for entity in self.entities if isinstance(entity, Sheep))
@@ -91,7 +106,7 @@ class Ecosystem:
         
         # Add some random plants occasionally
         if self.statistics.day % 5 == 0 and self.statistics.plants < 50:
-            x = random.randint(0, WIDTH)
+            x = random.randint(0, WIDTH-DEBUGGER_WIDTH)
             y = random.randint(0, HEIGHT)
             self.entities.append(Plant(x, y))
 
@@ -133,3 +148,31 @@ class Ecosystem:
         stats_text = f"Day: {self.statistics.day} | Plants: {self.statistics.plants} | Sheep: {self.statistics.sheep} | Foxes: {self.statistics.foxes} | Season : {self.statistics.season.value}"
         text_surface = font.render(stats_text, True, FONT_COLOR)
         screen.blit(text_surface, (10, 10))
+
+        screen.blit(black_area, (WIDTH-DEBUGGER_WIDTH, 0))
+        
+        y_offset = 10
+        for i, (key, value) in enumerate(self.debug.items()):
+            perception = value
+            # Create a surface to draw perception on
+            cell_size = 10  # Size of each block
+            surface_width = perception.shape[1] * cell_size
+            surface_height = perception.shape[0] * cell_size
+
+            perception_surface = pygame.Surface((surface_width, surface_height))
+            perception_surface.fill((0, 0, 0))  # Fill background black
+
+            # Draw perception matrix
+            for y in range(perception.shape[0]):
+                for x in range(perception.shape[1]):
+                    val = perception[y, x]
+                    color = GRAY
+                    if val == 'prey':
+                        color = GREEN
+                    elif val == 'predator':
+                        color = RED
+                    rect = pygame.Rect(x * cell_size, y * cell_size, cell_size, cell_size)
+                    pygame.draw.rect(perception_surface, color, rect)
+
+            screen.blit(perception_surface, (WIDTH-DEBUGGER_WIDTH + 10, y_offset))
+            y_offset = surface_height + y_offset + 10

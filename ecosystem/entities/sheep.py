@@ -5,7 +5,7 @@ import math
 import pygame
 from entities.base import Animal
 from entities.plant import Plant
-from config.settings import WIDTH, HEIGHT, IMAGE_PATHS
+from config.settings import WIDTH, HEIGHT, DEBUGGER_WIDTH, IMAGE_PATHS
 from config.parameters import SHEEP_PARAMS, ENTITY_IN_PRECEPTION
 from typing import TYPE_CHECKING, Tuple, Optional
 
@@ -52,8 +52,17 @@ class Sheep(Animal):
                 self.x += random.uniform(-self.speed, self.speed)
                 self.y += random.uniform(-self.speed, self.speed)
         
+        if self.debug and self.brain is not None:
+            p = self.brain.perception
+
+            # set pray as
+            p[p == ENTITY_IN_PRECEPTION.plant] = 'prey'
+            p[p == ENTITY_IN_PRECEPTION.fox] = 'predator'
+
+            ecosystem.debug[self.id] = p
+
         # Keep within bounds
-        self.x = max(0, min(WIDTH, self.x))
+        self.x = max(0, min(WIDTH-DEBUGGER_WIDTH, self.x))
         self.y = max(0, min(HEIGHT, self.y))
         
         # Reproduction
@@ -61,10 +70,6 @@ class Sheep(Animal):
             if ecosystem.statistics.sheep < ecosystem.constrains.sheeps_max:
                 self.reproduce(ecosystem)
 
-        if random.randint(1, 100) < self.monitor_chance:
-            if self.brain is not None:
-                res = self.brain.get_nearest_entity(entity_pereception_num=ENTITY_IN_PRECEPTION.plant)
-    
     # def find_food(self, ecosystem:'Ecosystem'):
     #     closest_distance = float('inf')
     #     for entity in ecosystem.entities:
@@ -116,7 +121,7 @@ class Sheep(Animal):
         # Create a new sheep nearby
         offset_x = random.randint(-20, 20)
         offset_y = random.randint(-20, 20)
-        new_x = max(0, min(WIDTH, self.x + offset_x))
+        new_x = max(0, min(WIDTH-DEBUGGER_WIDTH, self.x + offset_x))
         new_y = max(0, min(HEIGHT, self.y + offset_y))
         
         new_sheep = Sheep(new_x, new_y)

@@ -55,7 +55,7 @@ class Brain:
         
         # matrix width
         num_of_blocks = int((2 * self.vision_range) / smallest_entity_size)
-        self.perception = np.zeros((num_of_blocks, num_of_blocks))
+        self.perception = np.zeros((num_of_blocks, num_of_blocks), dtype='object')
         self.memory = {}
 
         print(f"""BRAIN({id}) : 
@@ -94,8 +94,7 @@ class Brain:
         pos = np.where(matrix == entity_pereception_num)        
         if len(pos[0]) == 0:
             return None  # Not found
-        
-        self.show_perception()
+        # self.show_perception()
 
         # Calculate distances from center to all 1s
         distances = []
@@ -127,7 +126,7 @@ class Brain:
         else:
             entity_y = min_col*smallest_entity_size
 
-        print(F"RETURNING {entity_x + (smallest_entity_size/2), entity_y + (smallest_entity_size/2)}")
+        # print(F"RETURNING {entity_x + (smallest_entity_size/2), entity_y + (smallest_entity_size/2)}")
         # return unit block center instead of top-left
         return entity_x + (smallest_entity_size/2), entity_y + (smallest_entity_size/2)
 

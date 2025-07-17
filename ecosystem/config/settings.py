@@ -3,6 +3,7 @@ from dataclasses import dataclass
 
 # Display settings
 WIDTH, HEIGHT = 1400, 800
+DEBUGGER_WIDTH = 300
 FPS = 15
 BACKGROUND_COLOR = (240, 240, 220)  # Light beige for natural look
 
@@ -18,7 +19,7 @@ WINTER = 2
 SUMMER = 3
 
 # brain params
-smallest_entity_size:int = 30 # to create vision blocks to minimize num neurons needed for vision
+smallest_entity_size:int = 10 # to create vision blocks to minimize num neurons needed for vision
 
 TILE_SIZE = 16
 TILE_MAP_LAYERS = {

@@ -3,8 +3,8 @@
 import random
 import math
 from entities.base import Entity, Animal
-from config.settings import WIDTH, HEIGHT, IMAGE_PATHS
-from config.parameters import FOX_PARAMS
+from config.settings import WIDTH, HEIGHT, DEBUGGER_WIDTH, IMAGE_PATHS
+from config.parameters import FOX_PARAMS, ENTITY_IN_PRECEPTION
 import random
 from typing import TYPE_CHECKING
 
@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from entities.sheep import Sheep
 
 class Fox(Animal):
-    def __init__(self, x, y):
+    def __init__(self, x, y, debug=False):
         super().__init__(x, y, IMAGE_PATHS.fox, size=FOX_PARAMS.size)
         self.energy = FOX_PARAMS.initial_energy
         self.speed = FOX_PARAMS.speed
@@ -21,6 +21,7 @@ class Fox(Animal):
         self.energy_consumption_rate = FOX_PARAMS.energy_consumption_rate
         self.vision_range = FOX_PARAMS.vision_range
         self.name = 'fox'
+        self.debug = debug
 
         self._init()
     
@@ -53,8 +54,16 @@ class Fox(Animal):
             self.x += random.uniform(-self.speed, self.speed)
             self.y += random.uniform(-self.speed, self.speed)
         
+        # if self.debug and self.brain is not None:
+        #     p = ecosystem.debug['perception']
+
+        #     # set pray as
+        #     p[p == ENTITY_IN_PRECEPTION.sheep] = 'prey'
+
+        #     ecosystem.debug[self.id] = p
+
         # Keep within bounds
-        self.x = max(0, min(WIDTH, self.x))
+        self.x = max(0, min(WIDTH-DEBUGGER_WIDTH, self.x))
         self.y = max(0, min(HEIGHT, self.y))
         
         # Reproduction
@@ -100,7 +109,7 @@ class Fox(Animal):
         # Create a new fox nearby
         offset_x = random.randint(-30, 30)
         offset_y = random.randint(-30, 30)
-        new_x = max(0, min(WIDTH, self.x + offset_x))
+        new_x = max(0, min(-DEBUGGER_WIDTH, self.x + offset_x))
         new_y = max(0, min(HEIGHT, self.y + offset_y))
         
         new_fox = Fox(new_x, new_y)

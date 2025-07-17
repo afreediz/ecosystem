@@ -3,7 +3,7 @@
 import random
 import pygame
 from entities.base import Entity
-from config.settings import WIDTH, HEIGHT, IMAGE_PATHS
+from config.settings import WIDTH, HEIGHT, DEBUGGER_WIDTH, IMAGE_PATHS
 from config.parameters import PLANT_PARAMS
 from typing import TYPE_CHECKING
 
@@ -41,7 +41,7 @@ class Plant(Entity):
         # Create a new plant nearby
         offset_x = random.randint(-20, 20)
         offset_y = random.randint(-20, 20)
-        new_x = max(0, min(WIDTH, self.x + offset_x))
+        new_x = max(0, min(WIDTH-DEBUGGER_WIDTH, self.x + offset_x))
         new_y = max(0, min(HEIGHT, self.y + offset_y))
         
         new_plant = Plant(new_x, new_y)
