@@ -42,6 +42,10 @@ class Entities:
         # cosmetic countdown (ticks): >0 means "recently bred" -> viewer tints it rose.
         # Never read by any decision/system, so it cannot affect determinism.
         self.mating_glow = np.zeros(cap, dtype=np.float32)
+        # circadian rest state: True while the animal is sleeping (set by the sleep system).
+        # Sleepers hold position, suppress eat/drink/mate, and burn energy slowly. Affects
+        # the sim (movement/metabolism), so it is real state, not a viewer-only flag.
+        self.asleep = np.zeros(cap, dtype=bool)
         self.alive = np.zeros(cap, dtype=bool)
 
         # free list of available slots (stack; pop from the end)
@@ -99,6 +103,7 @@ class Entities:
         self.genome[slots_k] = genomes[:k]
         self.repro_cooldown[slots_k] = 0.0
         self.mating_glow[slots_k] = 0.0    # recycled slots must not inherit a stale glow
+        self.asleep[slots_k] = False       # newborns / recycled slots start awake
         self.alive[slots_k] = True
         return slots_k
 

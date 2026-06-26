@@ -47,6 +47,26 @@ def daytime_name(time_of_day: float) -> str:
     return "night"
 
 
+def _smoothstep(a: float, b: float, x: float) -> float:
+    """Hermite smoothstep: 0 below ``a``, 1 above ``b``, smooth in between."""
+    if b <= a:
+        return 1.0 if x >= b else 0.0
+    t = min(1.0, max(0.0, (x - a) / (b - a)))
+    return t * t * (3.0 - 2.0 * t)
+
+
+def light_level(time_of_day: float) -> float:
+    """Daylight in [0,1]: ~0 at deep night, 1 at midday, smooth dawn/dusk transitions.
+
+    Cosmetic only (the viewer dims the scene by ``1 - light_level``); it is NOT read by
+    the sim. Kept here so the visual darkening lines up with the diurnal temperature curve
+    and the animals' sleep window (dusk ~0.78, dawn ~0.26)."""
+    t = time_of_day % 1.0
+    dawn = _smoothstep(0.16, 0.30, t)        # brighten through sunrise
+    dusk = 1.0 - _smoothstep(0.74, 0.88, t)  # darken through sunset
+    return float(dawn * dusk)
+
+
 class Environment:
     def __init__(self, cfg: EnvConfig, rng: np.random.Generator):
         self.cfg = cfg

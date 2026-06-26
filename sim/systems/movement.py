@@ -58,6 +58,8 @@ def apply(cfg, world, ent, idx, act, rng):
     elev = world.sample(world.elevation, px, py)
     terrain_factor = np.clip(1.0 - 0.5 * elev, 0.3, 1.0)
     move = speed * terrain_factor * dt
+    # sleeping animals hold their position (the sleep system already cleared their gates)
+    move = np.where(ent.asleep[idx], 0.0, move)
 
     new_x = px + nhx * move
     new_y = py + nhy * move

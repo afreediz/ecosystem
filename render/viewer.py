@@ -162,14 +162,28 @@ class EcosystemViewer(arcade.Window):
         self._draw_species(SHEEP, (245, 245, 245), max(2.0, self.scale * 0.8))
         self._draw_species(FOX, (220, 70, 40), max(3.0, self.scale * 1.1))
 
+        # nightfall: dim the whole scene as daylight fades (cosmetic, driven by the same
+        # diurnal clock the animals sleep by). Drawn over terrain + entities, under the HUD.
+        self._draw_night_overlay()
+
         self.gui_camera.use()
         self._draw_hud()
 
+    def _draw_night_overlay(self) -> None:
+        from sim.environment import light_level
+        darkness = 1.0 - light_level(self.sim.env.time_of_day)
+        if darkness <= 0.01:
+            return
+        alpha = int(165 * darkness)              # deep night ~ a heavy dusk-blue veil
+        arcade.draw_rect_filled(
+            arcade.LBWH(0, 0, self._content_w, self._content_h), (12, 18, 48, alpha))
+
     def _draw_species(self, species_id: int, base_color, size: float) -> None:
-        """Draw one species as a point cloud, with two per-entity overlays:
+        """Draw one species as a point cloud, with per-entity overlays:
 
         * animals that bred in the last ``mating_glow_duration`` ticks are tinted
           ``MATING_COLOR`` instead of their species color;
+        * sleeping animals are drawn dimmed (resting in the dark);
         * every male gets a small black dot offset to its top-right.
         """
         ent = self.sim.entities
@@ -179,13 +193,15 @@ class EcosystemViewer(arcade.Window):
         sx, sy = self._world_to_screen(ent.pos_x[slots], ent.pos_y[slots])
 
         mating = ent.mating_glow[slots] > 0.0
-        normal = ~mating
-        if normal.any():
-            arcade.draw_points(list(zip(sx[normal].tolist(), sy[normal].tolist())),
-                               base_color, size)
-        if mating.any():
-            arcade.draw_points(list(zip(sx[mating].tolist(), sy[mating].tolist())),
-                               MATING_COLOR, size)
+        asleep = ent.asleep[slots]
+        dim_color = tuple(int(ch * 0.45) for ch in base_color)
+        # three disjoint groups: awake, asleep (dimmed), and mating (tint wins either way)
+        for mask, color in ((~mating & ~asleep, base_color),
+                            (~mating & asleep, dim_color),
+                            (mating, MATING_COLOR)):
+            if mask.any():
+                arcade.draw_points(list(zip(sx[mask].tolist(), sy[mask].tolist())),
+                                   color, size)
 
         # male marker: a small black dot nudged toward the top-right of the body
         male = ent.sex[slots] == MALE
@@ -208,8 +224,8 @@ class EcosystemViewer(arcade.Window):
             f"{daytime_name(env.time_of_day)} ({env.time_of_day:.2f})   "
             f"{season_tag} ({env.season:.2f})   weather {WEATHER_NAMES[env.weather]}",
             f"births {s.get('births', 0)}  deaths {s.get('deaths', 0)} "
-            f"(pred {s.get('death_predation', 0)})",
-            "male: black dot (top-right)   mating: rose tint",
+            f"(pred {s.get('death_predation', 0)})   asleep {s.get('n_asleep', 0)}",
+            "male: black dot   mating: rose tint   asleep: dimmed",
         ]
         # dark translucent backing so white text stays readable over light terrain
         # (snow / beach / grazed grass) -- without it the HUD "disappears" on bright cells.
