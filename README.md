@@ -78,6 +78,11 @@ python run_experiment.py --ticks 20000 --plot      # also render a PNG report
 python -m analysis.plots runs/run.csv --out analysis/out
 ```
 
+Each run produces a 4-panel report — population vs time, vegetation biomass, sheep trait
+drift (the evolution signal), and the sheep–fox phase plot (the Lotka–Volterra loop):
+
+![Sample analysis report](analysis/out/demo_report.png)
+
 ## Architecture (the non-negotiables)
 
 - **`sim/` is pure numbers and never imports `render/`.** Both entry points share the
