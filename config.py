@@ -98,7 +98,7 @@ def default_species() -> dict:
         "metabolism_rate": GeneRange(0.7, 1.3),
         "size":            GeneRange(0.9, 1.8),
         "max_age":         GeneRange(1600.0, 3000.0),
-        "repro_threshold": GeneRange(0.68, 0.85),
+        "repro_threshold": GeneRange(0.62, 0.82),
         "aggression":      GeneRange(0.4, 1.0),  # behavioral gene (predation prob)
     }
     sheep = SpeciesConfig(
@@ -110,11 +110,14 @@ def default_species() -> dict:
     )
     fox = SpeciesConfig(
         name="fox", species_id=FOX, init_count=24, gene_ranges=fox_genes,
-        maturity_age=100.0, repro_cost=0.35, repro_cooldown=180.0, litter_size=2,
-        hunger_rate=0.0030, thirst_rate=0.0050, base_burn=0.0018, move_cost=0.0030,
-        population_cap=350, mutation_rate=0.18, mutation_strength=0.08,
-        repro_max_hunger=0.55, repro_max_thirst=0.6, predation_gain=0.7,
-        hunt_success=0.5, hunt_halfsat=110.0,
+        maturity_age=100.0, repro_cost=0.35, repro_cooldown=150.0, litter_size=2,
+        # fox metabolism runs leaner than prey (lower burn/hunger) so the predator can ride
+        # out prey troughs instead of starving to extinction at every dip -- the key to
+        # keeping fox numbers persistent rather than crashing (see v1.md §18).
+        hunger_rate=0.0020, thirst_rate=0.0050, base_burn=0.0012, move_cost=0.0020,
+        population_cap=430, mutation_rate=0.18, mutation_strength=0.08,
+        repro_max_hunger=0.55, repro_max_thirst=0.6, predation_gain=0.72,
+        hunt_success=0.5, hunt_halfsat=90.0,
     )
     return {SHEEP: sheep, FOX: fox}
 

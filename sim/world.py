@@ -97,12 +97,16 @@ class World:
         # plant suitability multiplier per biome (carrying capacity factor)
         self.plant_suitability = self._plant_suitability()
 
-        # cover: forest + mountain conceal prey from predators (a spatial refuge). This
-        # is the mechanism that stabilizes predator-prey coexistence -- without a refuge,
-        # foxes drive sheep to local extinction and then starve. Sheep in cover cannot be
-        # seen or caught by foxes; they must leave for the richer open grassland (plains)
-        # to forage, where they become vulnerable.
-        self.cover = (self.biome == FOREST) | (self.biome == MOUNTAIN)
+        # cover: dense FOREST conceals prey from predators (a spatial refuge). This is the
+        # mechanism that stabilizes predator-prey coexistence -- without a refuge, foxes
+        # drive sheep to local extinction and then starve. Sheep in cover cannot be seen or
+        # caught by foxes; they must leave for the richer open grassland (plains) to forage,
+        # where they become vulnerable. NOTE: bare, rocky MOUNTAIN is deliberately NOT cover.
+        # When it was, forest+mountain made ~40% of the map an untouchable prey reservoir:
+        # foxes could never crop enough sheep, the predator starved to extinction, and the
+        # prey then exploded. Forest-only refuge (~30% of land) still protects prey from
+        # total collapse while leaving foxes enough huntable range to persist (see v1.md §18).
+        self.cover = (self.biome == FOREST)
 
         # passability: open water (ocean + rivers/lakes) and very high mountain block
         # movement. Animals can't walk across water; they drink from an adjacent cell
