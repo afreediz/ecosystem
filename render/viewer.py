@@ -24,7 +24,8 @@ from sim.entities import MALE
 from sim.simulation import Simulation
 from sim.world import BIOME_COLORS
 from sim.perception import (
-    CH_TERRAIN, CH_WATER, CH_VEG, CH_FOOD, CH_THREAT, CH_MATE, N_CHANNELS)
+    SH_TERRAIN, SH_WATER, SH_FOOD, SH_THREAT, SH_MATE,
+    FX_TERRAIN, FX_WATER, FX_FOOD, FX_MATE)
 
 # Both species flash this rose hue for a few ticks right after they breed.
 MATING_COLOR = (255, 80, 150)
@@ -33,16 +34,24 @@ MALE_MARK_COLOR = (0, 0, 0)
 # Ring drawn around the currently-selected (inspected) entity.
 SELECT_COLOR = (255, 230, 60)
 
-# Perception-grid inspector: one (label, channel, base colour) per channel. The base
+# Perception-grid inspector: per-species (label, channel, base colour) lists -- each species
+# carries only the channels it uses, so the panel adapts to the selected agent. The base
 # colour is the hue a fully-present cell glows; intermediate values fade toward black.
-GRID_CHANNELS = [
-    ("terrain", CH_TERRAIN, (150, 150, 150)),
-    ("water",   CH_WATER,   (60, 130, 220)),
-    ("veg",     CH_VEG,     (90, 190, 80)),
-    ("food",    CH_FOOD,    (250, 200, 50)),
-    ("threat",  CH_THREAT,  (230, 60, 40)),
-    ("mate",    CH_MATE,    (255, 90, 160)),
-]
+GRID_CHANNELS_BY_SPECIES = {
+    SHEEP: [
+        ("terrain", SH_TERRAIN, (150, 150, 150)),
+        ("water",   SH_WATER,   (60, 130, 220)),
+        ("food",    SH_FOOD,    (90, 190, 80)),     # food = grass field
+        ("threat",  SH_THREAT,  (230, 60, 40)),
+        ("mate",    SH_MATE,    (255, 90, 160)),
+    ],
+    FOX: [
+        ("terrain", FX_TERRAIN, (150, 150, 150)),
+        ("water",   FX_WATER,   (60, 130, 220)),
+        ("food",    FX_FOOD,    (250, 200, 50)),    # food = prey entities
+        ("mate",    FX_MATE,    (255, 90, 160)),
+    ],
+}
 
 
 class EcosystemViewer(arcade.Window):
@@ -280,9 +289,9 @@ class EcosystemViewer(arcade.Window):
 
     # ------------------------------------------------------------------ perception inspector
     def _selected_obs_grids(self):
-        """The (N_CHANNELS, K, K) perception stack of the selected agent, or None.
+        """The (C, K, K) perception stack of the selected agent, or None.
 
-        Looks the entity's slot up in the sim's latest observation. Returns None when
+        Looks the entity's slot up in its species' latest observation. Returns None when
         nothing is selected, the agent died, or it isn't in this tick's obs yet.
         """
         slot = self._selected_slot
@@ -291,42 +300,48 @@ class EcosystemViewer(arcade.Window):
         if not bool(self.sim.entities.alive[slot]):
             self._selected_slot = None
             return None
-        obs = self.sim.last_obs
-        idx = self.sim.last_obs_idx
-        if obs is None or idx is None:
+        obs_by_species = self.sim.last_obs
+        if obs_by_species is None:
             return None
-        rows = np.nonzero(idx == slot)[0]
+        species_id = int(self.sim.entities.species[slot])
+        obs = obs_by_species.get(species_id)
+        if obs is None:
+            return None
+        rows = np.nonzero(obs.idx == slot)[0]
         if rows.shape[0] == 0 or int(rows[0]) >= obs.grids.shape[0]:
             return None
         return obs.grids[int(rows[0])]
 
-    def _ensure_grid_textures(self, k: int) -> None:
-        """Lazily (re)build the per-channel RGBA textures for a window side ``k``."""
-        if self._grid_textures is not None and self._grid_k == k:
+    def _ensure_grid_textures(self, k: int, n_ch: int) -> None:
+        """Lazily (re)build ``n_ch`` per-channel RGBA textures for a window side ``k``."""
+        if self._grid_textures is not None and self._grid_k == (k, n_ch):
             return
         self._grid_textures = []
-        for _ in range(N_CHANNELS):
+        for _ in range(n_ch):
             rgba = np.zeros((k, k, 4), dtype=np.uint8)
             img = Image.fromarray(rgba, mode="RGBA")
             tex = arcade.Texture(img)
             self.ctx.default_atlas.add(tex)
             self._grid_textures.append([tex, rgba, img])
-        self._grid_k = k
+        self._grid_k = (k, n_ch)
 
     def _draw_perception_inspector(self) -> None:
         grids = self._selected_obs_grids()
         if grids is None:
             return
-        k = grids.shape[-1]
-        self._ensure_grid_textures(k)
-
         ent = self.sim.entities
         slot = self._selected_slot
-        species = "fox" if ent.species[slot] == FOX else "sheep"
+        species_id = int(ent.species[slot])
+        channels = GRID_CHANNELS_BY_SPECIES[species_id]
+        n_ch = len(channels)
+        k = grids.shape[-1]
+        self._ensure_grid_textures(k, n_ch)
+
+        species = "fox" if species_id == FOX else "sheep"
 
         # layout: two columns of channel tiles tucked under the top-right corner
         chan, gap, label_h, margin = 92, 6, 14, 8
-        cols, rows = 2, (N_CHANNELS + 1) // 2
+        cols, rows = 2, (n_ch + 1) // 2
         header_h = 18
         panel_w = cols * chan + (cols + 1) * gap
         panel_h = header_h + rows * (chan + label_h) + (rows + 1) * gap
@@ -339,7 +354,7 @@ class EcosystemViewer(arcade.Window):
                          SELECT_COLOR, 12, font_name=("consolas", "monospace"))
 
         grid_top = y_top - header_h
-        for i, (label, ch, color) in enumerate(GRID_CHANNELS):
+        for i, (label, ch, color) in enumerate(channels):
             col, row = i % cols, i // cols
             cell_x = x0 + gap + col * (chan + gap)
             cell_top = grid_top - gap - row * (chan + label_h + gap)

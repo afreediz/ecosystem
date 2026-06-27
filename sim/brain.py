@@ -1,16 +1,20 @@
 """Brain interface + hardcoded RuleBrain (§7.1, §13 of v1.md).
 
-The contract is the spine of the whole project: ``decide(obs) -> act`` where ``obs`` is an
-``Observation`` (egocentric perception grids + a scalar vector, see ``sim/perception.py``)
-and ``act`` is the (N, ACT_DIM) action matrix. The brain sees ONLY the observation --
-exactly what a future PyTorch/CNN brain will get. Swapping RuleBrain for a TorchBrain
-changes nothing else; the CNN would consume ``obs.grids`` (N, C, K, K) as image channels.
+The contract is the spine of the whole project: ``decide(obs_by_species, idx) -> act``
+where ``obs_by_species`` maps each species to its ``Observation`` (per-species egocentric
+perception grids + a scalar vector, see ``sim/perception.py``) and ``act`` is the
+(N, ACT_DIM) action matrix aligned to the GLOBAL alive ordering ``idx``. The brain sees
+ONLY the observations -- exactly what a future PyTorch/CNN brain will get. The CNN would
+consume each species' ``obs.grids`` (N, C, K, K) as image channels.
 
 Because a *rule* brain can't run a convolution, it first **decodes** the relevant grid
 channels back into the simple targets it reasons over -- "nearest threat", "best grass
-cell", "nearest mate/water/prey". That decoding (``nearest_in_channel`` / ``best_in_channel``)
-is the only thing that moved out of perception; the priority arbitration below is the same
-as before. A neural brain skips the decoding and learns straight off the channels.
+cell", "nearest mate/water/prey" (``nearest_in_channel`` / ``best_in_channel``). A neural
+brain skips the decoding and learns straight off the channels.
+
+Each species is decoded separately (its grids carry only the channels it uses), but the
+explore-heading RNG is drawn ONCE over the global ordering so the action stream is identical
+regardless of how perception is partitioned (keeps runs deterministic + comparable).
 
 Adjacency and reproduction *eligibility* are only proxied here from the observation; the
 consumption / reproduction systems enforce the authoritative conditions, so the brain
@@ -21,9 +25,11 @@ from __future__ import annotations
 
 import numpy as np
 
+from config import SHEEP, FOX
 from sim.perception import (
-    CH_WATER, CH_VEG, CH_FOOD, CH_THREAT, CH_MATE,
-    S_HUNGER, S_THIRST, S_ENERGY, S_SENSORY, S_DIET,
+    SH_WATER, SH_FOOD, SH_THREAT, SH_MATE,
+    FX_WATER, FX_FOOD, FX_MATE,
+    S_HUNGER, S_THIRST, S_ENERGY, S_SENSORY,
 )
 
 ACT_DIM = 5
@@ -108,8 +114,9 @@ def best_in_channel(chan: np.ndarray, thr: float):
 
 
 class Brain:
-    def decide(self, obs) -> np.ndarray:
-        """obs: Observation -> actions: (N, ACT_DIM) float32."""
+    def decide(self, obs_by_species, idx) -> np.ndarray:
+        """obs_by_species: {species_id: Observation}, idx: global alive slot ids.
+        Returns actions: (len(idx), ACT_DIM) float32 aligned to ``idx``."""
         raise NotImplementedError
 
 
@@ -128,36 +135,53 @@ class RuleBrain(Brain):
         self.rng = rng
         self.food_thr = float(food_threshold)
 
-    def decide(self, obs) -> np.ndarray:
-        grids = obs.grids                       # (N, C, K, K)
-        sc = obs.scalars                        # (N, SCALAR_DIM)
+    def decide(self, obs_by_species, idx) -> np.ndarray:
+        n_global = idx.shape[0]
+        act = np.zeros((n_global, ACT_DIM), dtype=np.float32)
+        if n_global == 0:
+            return act
+        # Draw explore headings ONCE over the global ordering, then hand each species the
+        # slice for its rows. This keeps the random stream identical to a single batched
+        # draw, so partitioning perception by species does not change the trajectory.
+        ang = self.rng.uniform(0.0, 2 * np.pi, size=n_global).astype(np.float32)
+        for sid in (SHEEP, FOX):
+            obs = obs_by_species.get(sid)
+            if obs is None or obs.grids.shape[0] == 0:
+                continue
+            pos = np.searchsorted(idx, obs.idx)        # rows of this species in global act
+            act[pos] = self._decide_species(obs, ang[pos])
+        return act
+
+    def _decide_species(self, obs, ang) -> np.ndarray:
+        grids = obs.grids                       # (n, C, K, K) for this species' layout
+        sc = obs.scalars                        # (n, SCALAR_DIM)
         n = grids.shape[0]
         act = np.zeros((n, ACT_DIM), dtype=np.float32)
-        if n == 0:
-            return act
 
         hunger, thirst, energy = sc[:, S_HUNGER], sc[:, S_THIRST], sc[:, S_ENERGY]
         sens = np.maximum(sc[:, S_SENSORY], 1e-6)
-        is_pred = sc[:, S_DIET] > 0.5
 
-        # --- decode grids into the targets the rules reason over ---
-        # food: herbivores forage the best grass cell; carnivores chase the nearest prey.
-        veg_p, veg_dx, veg_dy, veg_dc = best_in_channel(grids[:, CH_VEG], self.food_thr)
-        prey_p, prey_dx, prey_dy, prey_dc = nearest_in_channel(grids[:, CH_FOOD])
-        food_p = np.where(is_pred, prey_p, veg_p)
-        food_dx = np.where(is_pred, prey_dx, veg_dx)
-        food_dy = np.where(is_pred, prey_dy, veg_dy)
-        food_d = np.clip(np.where(is_pred, prey_dc, veg_dc) / sens, 0.0, 1.0)
+        # --- decode the channels this species carries into nearest/best targets ---
+        if obs.species == SHEEP:
+            # herbivore: food is the best grass cell; threat is the nearest fox
+            food_p, food_dx, food_dy, food_dc = best_in_channel(grids[:, SH_FOOD], self.food_thr)
+            wat_p, wat_dx, wat_dy, wat_dc = nearest_in_channel(grids[:, SH_WATER])
+            mate_p, mate_dx, mate_dy, mate_dc = nearest_in_channel(grids[:, SH_MATE])
+            thr_p, thr_dx, thr_dy, thr_dc = nearest_in_channel(grids[:, SH_THREAT])
+        else:  # FOX
+            # carnivore: food is the nearest prey; no threat channel (no predators)
+            food_p, food_dx, food_dy, food_dc = nearest_in_channel(grids[:, FX_FOOD])
+            wat_p, wat_dx, wat_dy, wat_dc = nearest_in_channel(grids[:, FX_WATER])
+            mate_p, mate_dx, mate_dy, mate_dc = nearest_in_channel(grids[:, FX_MATE])
+            z = np.zeros(n, dtype=np.float32)
+            thr_p, thr_dx, thr_dy, thr_dc = z, z, z, z
 
-        thr_p, thr_dx, thr_dy, thr_dc = nearest_in_channel(grids[:, CH_THREAT])
+        food_d = np.clip(food_dc / sens, 0.0, 1.0)
         thr_d = np.clip(thr_dc / sens, 0.0, 1.0)
-        mate_p, mate_dx, mate_dy, mate_dc = nearest_in_channel(grids[:, CH_MATE])
         mate_d = np.clip(mate_dc / sens, 0.0, 1.0)
-        wat_p, wat_dx, wat_dy, wat_dc = nearest_in_channel(grids[:, CH_WATER])
         wat_d = np.clip(wat_dc / sens, 0.0, 1.0)
 
-        # --- priority 4: explore (default) -- fresh random heading; movement smooths it
-        ang = self.rng.uniform(0.0, 2 * np.pi, size=n).astype(np.float32)
+        # --- priority 4: explore (default) -- random heading (drawn globally); movement smooths it
         head_x = np.cos(ang)
         head_y = np.sin(ang)
 
