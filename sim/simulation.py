@@ -51,7 +51,7 @@ class Simulation:
         }
 
         self.perception = Perception(self.cfg, self.world, self.entities, self.grid, self.env)
-        self.brain = RuleBrain(self.rng)
+        self.brain = RuleBrain(self.rng, self.cfg.sim.food_eat_threshold)
         self.brain_system = BrainSystem(self.brain)
 
         self.tick = 0

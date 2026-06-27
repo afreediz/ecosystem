@@ -18,7 +18,8 @@ from __future__ import annotations
 import numpy as np
 
 from sim import genome as gn
-from sim.brain import A_DX, A_DY, A_EAT, A_DRINK, A_REPRO
+from sim.brain import A_DX, A_DY, A_EAT, A_DRINK, A_REPRO, nearest_in_channel
+from sim.perception import CH_THREAT, S_SENSORY
 
 # A threat within this fraction of sensory range keeps a sheep awake to flee (mirrors the
 # brain's _FLEE_TRIGGER so sleep never suppresses an escape from a close fox).
@@ -49,8 +50,11 @@ def apply(cfg, world, ent, idx, act, obs, env) -> int:
     in_cover = world.in_cover(px, py)
 
     # a close predator overrides sleep -- the sheep stays awake and the brain's flee
-    # heading (already in ``act``) is preserved
-    threat_close = (obs[:, 13] > 0.5) & (obs[:, 12] < _WAKE_THREAT)
+    # heading (already in ``act``) is preserved. Decode the threat grid the same way the
+    # brain does (nearest predator, as a fraction of the animal's own sensory range).
+    thr_p, _, _, thr_dc = nearest_in_channel(obs.grids[:, CH_THREAT])
+    thr_frac = thr_dc / np.maximum(obs.scalars[:, S_SENSORY], 1e-6)
+    threat_close = (thr_p > 0.5) & (thr_frac < _WAKE_THREAT)
 
     # seeking shelter: night, still within the grace window, not yet safe, no near threat
     seeking = in_rest & early & ~in_cover & ~threat_close
