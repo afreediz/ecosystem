@@ -346,7 +346,7 @@ returns a `{species_id: Observation}` dict and the **global** alive-index array.
 context (`_species_grids`, `veg`) is wired in by `Simulation.step` before the call.
 
 **`Observation`** (a `__slots__` class) carries `grids` `(N, C, K, K)` float32, `scalars`
-`(N, SCALAR_DIM=11)` float32, `radius` (the window half-width `R`), `idx` (the global slot
+`(N, SCALAR_DIM=10)` float32, `radius` (the window half-width `R`), `idx` (the global slot
 ids of its rows, for scatter-back), and `species`.
 
 **Window geometry, set once in `__init__`:** `R = ceil(largest sensory_range across all
@@ -370,8 +370,8 @@ species (`_ensure_buffers`). Each `_build_species`:
     (`world.in_cover` filters out sheep hidden in the refuge); `_scatter_mates` for mates. No
     threat channel.
 - **scalars** — direct reads: hunger, thirst, energy, health, age/max_age, sex, own-cell
-  temperature, time_of_day, season, `sensory_range` (for distance normalization & the CNN),
-  and `diet` (1 for fox).
+  temperature, time_of_day, season, and `sensory_range` (for distance normalization & the
+  CNN).
 
 Helpers:
 - `_field(src_pad, cx, cy, masks)` — `sliding_window_view(src_pad,(K,K))[cy,cx] * masks`.
@@ -381,8 +381,8 @@ Helpers:
   the mate query (they can't breed).
 
 Layout constants are the single source of truth: `SH_TERRAIN…SH_MATE` (5), `FX_TERRAIN…
-FX_MATE` (4), `CHANNEL_NAMES`, `SPECIES_N_CHANNELS`, and the scalar indices `S_HUNGER…S_DIET`
-(`SCALAR_DIM = 11`).
+FX_MATE` (4), `CHANNEL_NAMES`, `SPECIES_N_CHANNELS`, and the scalar indices `S_HUNGER…
+S_SENSORY` (`SCALAR_DIM = 10`).
 
 **Why per-species grids:** they are literally a CNN's channel-stack, and giving each species
 only the channels it uses means a future per-species CNN has zero dead inputs. **Why strict
@@ -602,7 +602,7 @@ The architecture's payoff. To add a neural brain:
 1. Implement `class TorchBrain(Brain)` with `decide(obs_by_species, idx) -> np.ndarray` (or a
    torch tensor bridged to numpy). It consumes each species' `Observation.grids`
    `(N, C, K, K)` directly as CNN channel-stacks (the rule brain only decodes them because it
-   can't convolve) plus the `(N, 11)` scalars, and returns the `(len(idx), 5)` act.
+   can't convolve) plus the `(N, 10)` scalars, and returns the `(len(idx), 5)` act.
 2. Construct it in `Simulation.__init__` instead of `RuleBrain` (one line), or make it a
    config switch.
 

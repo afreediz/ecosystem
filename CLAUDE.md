@@ -30,7 +30,7 @@ in behind the same contract with no sim rewrite.
   are zeroed. Layouts: **sheep** = `terrain, water, food(=grass field), threat(=foxes),
   mate` (5); **fox** = `terrain, water, food(=exposed prey), mate` (4). The `food` channel
   is species-specific in content (grass for herbivores, prey for carnivores). `obs.scalars`
-  is `(N, SCALAR_DIM=11)` internal state + global env. The grids are CNN-channel-ready (the
+  is `(N, SCALAR_DIM=10)` internal state + global env. The grids are CNN-channel-ready (the
   whole point of the grid design); the `RuleBrain` decodes each species separately into
   nearest/best targets (`nearest_in_channel` / `best_in_channel` in `sim/brain.py`) since a
   rule brain can't convolve, but draws explore headings ONCE over the global ordering so

@@ -38,7 +38,7 @@ These decisions shape everything else and exist to protect the long-term (neural
 2. **The brain↔world contract is the spine.** Every decision flows through
    `decide(obs_by_species, idx) → act`. Each species gets its own `Observation` — egocentric
    perception **grids** `(N, C, K, K)` (CNN-channel-ready) plus a small scalar vector
-   `(N, 11)` — and the brain returns the `(len(idx), 5)` action matrix aligned to the
+   `(N, 10)` — and the brain returns the `(len(idx), 5)` action matrix aligned to the
    **global** alive ordering `idx`. The brain sees **only** the observations — no hidden world
    access. This is the seam a neural network slots into (see §8).
 
@@ -367,7 +367,7 @@ no threat channel.
   query (they can't breed) — both big savings. Entity queries go through per-species spatial
   hashes for near-O(N) performance.
 
-**The scalars** are `(N, 11)`, identical layout for both species — the internal state and
+**The scalars** are `(N, 10)`, identical layout for both species — the internal state and
 global env that don't belong on a spatial grid:
 
 | idx | content |
@@ -376,7 +376,6 @@ global env that don't belong on a spatial grid:
 | 6 | local temperature (own cell) |
 | 7–8 | time of day, season |
 | 9 | sensory_range (cells — for distance normalization & the CNN) |
-| 10 | diet (1 = carnivore) |
 
 `build` returns `(obs_by_species, idx)`: a dict mapping each species to its `Observation`
 (grids + scalars + radius), and the **global** alive ordering `idx` so all downstream
