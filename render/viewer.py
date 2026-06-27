@@ -353,8 +353,9 @@ class EcosystemViewer(arcade.Window):
     def _update_channel_texture(self, i: int, chan_vals: np.ndarray, color) -> None:
         """Paint one channel into its texture: brightness ~ value, marker at the centre."""
         tex, rgba, img = self._grid_textures[i]
-        # flip vertically so the tile's "up" matches the map's (larger world-y at top)
-        v = np.flipud(np.clip(chan_vals, 0.0, 1.0))
+        # no flip: channel row 0 is the smallest world-y, which the map also draws at the
+        # top (see _world_to_screen), so the tile orientation already matches the map.
+        v = np.clip(chan_vals, 0.0, 1.0)
         rgba[..., 0] = (color[0] * v).astype(np.uint8)
         rgba[..., 1] = (color[1] * v).astype(np.uint8)
         rgba[..., 2] = (color[2] * v).astype(np.uint8)
