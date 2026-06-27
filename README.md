@@ -8,8 +8,17 @@ can be measured.
 
 This is **v1**: the brain is hardcoded rules, but the architecture around it (batched
 brain system, observation/action vector schemas, SoA entity store) is built so a PyTorch
-neural brain can be dropped in later with **zero sim rewrite**. See [v1.md](v1.md) for the
-full spec.
+neural brain can be dropped in later with **zero sim rewrite**.
+
+## Documentation
+
+- **[docs/v1/OVERVIEW.md](docs/v1/OVERVIEW.md)** — the "what & why": features, algorithms,
+  the reasoning behind each choice, and all metrics/thresholds (world, atmosphere,
+  vegetation, entities, genome, perception, brain, sleep).
+- **[docs/v1/TECHNICAL.md](docs/v1/TECHNICAL.md)** — the "how it's coded": file structure,
+  recurring code patterns, and the per-module API (classes, functions, signatures).
+- **[v1.md](v1.md)** — the original authoritative build spec.
+- **[CLAUDE.md](CLAUDE.md)** — working guidance + predator–prey calibration notes.
 
 ## Install
 
@@ -28,7 +37,33 @@ python run_live.py                 # default seed
 python run_live.py --seed 7 --scale 5 --spf 4
 ```
 
-Controls: `SPACE` pause · `↑/↓` sim-steps-per-frame · `ESC` quit.
+CLI flags: `--seed N` (master seed) · `--scale N` (pixels per world cell) · `--spf N`
+(sim steps per rendered frame; fractional ok, e.g. `0.25` = 1 step every 4 frames).
+
+### Live viewer controls
+
+| Key / input | Action |
+|---|---|
+| `SPACE` | pause / resume |
+| `↑` / `↓` | sim speed up / slow down (×2 / ÷2 steps-per-frame) |
+| `+` / `-` / `=` | zoom in / out (centered on screen) |
+| mouse wheel | zoom in / out (centered on cursor) |
+| middle-drag | pan the map |
+| `0` | reset view (refit the whole map) |
+| `V` | toggle the vegetation overlay |
+| `Ctrl+V` | freeze / unfreeze vegetation regrowth (grazing still depletes it) |
+| `S` | fast-forward the season (+0.1 year) |
+| `Ctrl+S` | pause / resume seasonal progression (day & weather keep running) |
+| `Shift+S` | spawn a sheep at the cursor |
+| `Shift+F` | spawn a fox at the cursor |
+| `ESC` | quit |
+
+The viewer is an **observer only** — these controls never feed back into the measured
+simulation, except manual spawning (`Shift+S` / `Shift+F`), which draws from the master RNG
+and so breaks run reproducibility (the headless path never spawns manually).
+
+On-screen markers: a small black dot = male · a rose tint = bred in the last few ticks ·
+dimmed = asleep · the whole scene darkens at night.
 
 **Headless experiment** (fast-forward, writes CSV):
 
