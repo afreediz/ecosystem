@@ -21,6 +21,7 @@ GENE_NAMES = [
     "repro_threshold",
     "flee_distance",   # sheep behavioral gene
     "aggression",      # fox behavioral gene
+    "chronotype",      # circadian gene: per-individual sleep-time offset (both species)
 ]
 GENE_INDEX = {name: i for i, name in enumerate(GENE_NAMES)}
 N_GENES = len(GENE_NAMES)
@@ -35,6 +36,7 @@ _NEUTRAL = {
     "repro_threshold": 0.6,
     "flee_distance": 0.7,
     "aggression": 0.7,
+    "chronotype": 0.0,
 }
 
 

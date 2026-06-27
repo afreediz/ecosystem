@@ -34,19 +34,25 @@ def apply(cfg, world, ent, idx, temp_field, env, rng):
     thirst_rate = np.where(spec == FOX, cfg.species[FOX].thirst_rate,
                            cfg.species[SHEEP].thirst_rate).astype(np.float32)
 
-    # energy burn scales with metabolism gene, plus a movement cost proxy (speed*size)
-    burn = (base_burn + move_cost * max_speed * size) * metab * dt
+    # sleepers rest: only a reduced basal burn (no locomotion cost) and needs accrue slower
+    asleep = ent.asleep[idx]
+    awake_burn = base_burn + move_cost * max_speed * size
+    rest_burn = base_burn * cfg.env.sleep_burn_factor
+    burn = np.where(asleep, rest_burn, awake_burn) * metab * dt
     ent.energy[idx] = ent.energy[idx] - burn
 
-    # hunger / thirst accumulate (thirst scaled by local heat)
-    ent.hunger[idx] = np.clip(ent.hunger[idx] + hunger_rate * metab * dt, 0.0, 1.5)
+    # hunger / thirst accumulate (thirst scaled by local heat; slower while asleep)
+    need_factor = np.where(asleep, cfg.env.sleep_need_factor, 1.0).astype(np.float32)
+    ent.hunger[idx] = np.clip(
+        ent.hunger[idx] + hunger_rate * metab * need_factor * dt, 0.0, 1.5)
     px, py = ent.pos_x[idx], ent.pos_y[idx]
     cx, cy = world.world_to_cell(px, py)
     local_temp = temp_field[cy, cx]
     heat_factor = 0.6 + 1.2 * local_temp            # hotter cells -> thirstier
     if env.weather == 2:  # HEAT
         heat_factor *= cfg.env.heat_thirst_factor
-    ent.thirst[idx] = np.clip(ent.thirst[idx] + thirst_rate * heat_factor * dt, 0.0, 1.5)
+    ent.thirst[idx] = np.clip(
+        ent.thirst[idx] + thirst_rate * heat_factor * need_factor * dt, 0.0, 1.5)
 
     # high hunger/thirst drain energy and health
     starving = ent.hunger[idx] > 0.85

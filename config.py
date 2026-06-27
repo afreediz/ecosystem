@@ -47,6 +47,18 @@ class EnvConfig:
     rain_moisture_boost: float = 0.25
     heat_thirst_factor: float = 1.8     # multiplier on thirst during "heat" weather
 
+    # --- sleep / circadian rhythm (§ diurnal behavior) ---
+    # Animals rest at night: as dusk falls they head for a safe spot (cover) and sleep,
+    # waking near dawn. Onset/wake are the *population mean* times-of-day; each individual
+    # is shifted by its heritable ``chronotype`` gene so they don't all drop at once.
+    sleep_onset: float = 0.80           # mean time_of_day when night rest begins (~dusk)
+    sleep_wake: float = 0.26            # mean time_of_day when animals wake (~dawn)
+    # grace window (fraction of a day) after onset to reach cover before collapsing where
+    # they stand -- past this point a straggler sleeps wherever it is (exhaustion).
+    sleep_shelter_window: float = 0.06
+    sleep_burn_factor: float = 0.45     # metabolic burn multiplier while asleep (resting)
+    sleep_need_factor: float = 0.6      # hunger/thirst accumulate slower while asleep
+
 
 @dataclass
 class GeneRange:
@@ -91,6 +103,7 @@ def default_species() -> dict:
         "max_age":         GeneRange(1400.0, 2600.0),
         "repro_threshold": GeneRange(0.5, 0.8),
         "flee_distance":   GeneRange(0.4, 1.0),  # behavioral gene (fraction of range)
+        "chronotype":      GeneRange(-0.06, 0.06),  # per-individual sleep-time offset
     }
     fox_genes = {
         "max_speed":       GeneRange(1.0, 2.4),
@@ -100,6 +113,7 @@ def default_species() -> dict:
         "max_age":         GeneRange(1600.0, 3000.0),
         "repro_threshold": GeneRange(0.62, 0.82),
         "aggression":      GeneRange(0.4, 1.0),  # behavioral gene (predation prob)
+        "chronotype":      GeneRange(-0.06, 0.06),  # per-individual sleep-time offset
     }
     sheep = SpeciesConfig(
         name="sheep", species_id=SHEEP, init_count=240, gene_ranges=sheep_genes,

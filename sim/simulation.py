@@ -4,10 +4,11 @@ Headless and deterministic. A single seeded RNG (from config) is threaded into e
 system that needs randomness. This module imports NOTHING from render/.
 
 Fixed tick order:
-  1 environment.update      5 movement.apply        9 vegetation.grow
-  2 grid.rebuild            6 consumption.apply     10 logger.record (caller)
-  3 perception.build        7 metabolism.apply
-  4 brain_system.decide     8 reproduction.apply
+  1 environment.update      5 sleep.apply           9  metabolism.apply
+  2 grid.rebuild            6 movement.apply        10 reproduction.apply
+  3 perception.build        7 consumption.apply     11 vegetation.grow
+  4 brain_system.decide                             12 logger.record (caller)
+                                                       (sleep gates act before movement)
 """
 from __future__ import annotations
 
@@ -21,7 +22,7 @@ from sim.grid import SpatialGrid
 from sim.perception import Perception
 from sim.brain import RuleBrain
 from sim.systems.brain_system import BrainSystem
-from sim.systems import movement, consumption, metabolism, reproduction, vegetation
+from sim.systems import movement, consumption, metabolism, reproduction, vegetation, sleep
 from sim import genome as gn
 
 
@@ -145,10 +146,14 @@ class Simulation:
         # 4. batched brain decision
         act = self.brain_system.decide(obs)
 
-        # 5. movement
+        # 5. circadian rest: night-time sleepers head for cover, then bed down. Gates the
+        #    action matrix (and sets ent.asleep) BEFORE movement/consumption read it.
+        n_asleep = sleep.apply(self.cfg, world, ent, idx, act, obs, self.env)
+
+        # 6. movement
         movement.apply(self.cfg, world, ent, idx, act, self.rng)
 
-        # 6. consumption (grids may now be slightly stale re: positions, fine for adjacency
+        # 7. consumption (grids may now be slightly stale re: positions, fine for adjacency
         #    checks which we recompute exactly). Predation kills prey slots immediately.
         killed, n_drink, n_graze, n_pred = consumption.apply(
             self.cfg, world, ent, idx, act, self.veg, self._species_grids, self.rng)
@@ -159,7 +164,7 @@ class Simulation:
             idx = idx[alive_mask]
             act = act[alive_mask]
 
-        # 7. metabolism (energy/hunger/thirst/health/aging/death)
+        # 9. metabolism (energy/hunger/thirst/health/aging/death; sleepers burn less)
         causes = metabolism.apply(self.cfg, world, ent, idx, temp_field, self.env, self.rng)
 
         # drop dead from the working set before reproduction
@@ -167,15 +172,15 @@ class Simulation:
         idx = idx[alive_mask]
         act = act[alive_mask]
 
-        # 8. reproduction
+        # 10. reproduction
         births = reproduction.apply(self.cfg, world, ent, idx, act,
                                     self._species_grids, self.rng)
 
-        # 9. vegetation growth (skipped when paused: grazed cells stay depleted)
+        # 11. vegetation growth (skipped when paused: grazed cells stay depleted)
         if not self.veg_growth_paused:
             vegetation.grow(self.cfg, world, self.env, self.veg, dt)
 
-        # 10. stats for logger / HUD
+        # 12. stats for logger / HUD
         self.tick += 1
         deaths_total = sum(causes.values()) + n_pred
         self.stats = {
@@ -192,6 +197,7 @@ class Simulation:
             "death_predation": n_pred,
             "n_drink": n_drink,
             "n_graze": n_graze,
+            "n_asleep": n_asleep,
         }
         return self.stats
 

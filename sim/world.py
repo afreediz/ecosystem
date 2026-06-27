@@ -116,6 +116,11 @@ class World:
         # nearest-freshwater fields for perception (direction + distance to drink)
         self._build_freshwater_fields()
 
+        # nearest-cover fields: lets the sleep system steer animals toward the closest safe
+        # spot (forest cover) to bed down at night without a per-agent search each tick.
+        (self.cover_dist, self.cover_nearest_x,
+         self.cover_nearest_y) = self._nearest_source_fields(self.cover)
+
     # ------------------------------------------------------------------ biomes
     def _classify_biomes(self) -> np.ndarray:
         c = self.cfg
@@ -146,12 +151,13 @@ class World:
         s[self.water_any] = 0.0
         return s
 
-    # ------------------------------------------------------------------ freshwater fields
-    def _build_freshwater_fields(self) -> None:
-        """Multi-source BFS: for every cell, the nearest freshwater cell + its distance.
+    # ------------------------------------------------------------------ nearest-source fields
+    def _nearest_source_fields(self, source: np.ndarray):
+        """Multi-source BFS over a boolean ``source`` mask.
 
-        Stored as cell-center coordinates (``fw_nearest_x/y``) and a distance field
-        (``fw_dist`` in cell units; inf where no freshwater is reachable).
+        Returns ``(dist, nearest_x, nearest_y)``: for every cell, the distance (in cell
+        units; inf where no source is reachable) to the closest source cell and that
+        cell's center coordinates. Used for both freshwater (drinking) and cover (sleep).
         """
         from collections import deque
         h, w = self.h, self.w
@@ -160,7 +166,7 @@ class World:
         nx_arr = np.full((h, w), -1, dtype=np.int32)
         ny_arr = np.full((h, w), -1, dtype=np.int32)
         dq = deque()
-        ys, xs = np.nonzero(self.freshwater)
+        ys, xs = np.nonzero(source)
         for y, x in zip(ys.tolist(), xs.tolist()):
             dist[y, x] = 0.0
             nx_arr[y, x] = x
@@ -180,10 +186,18 @@ class World:
                         nx_arr[ny, nx] = nx_arr[y, x]
                         ny_arr[ny, nx] = ny_arr[y, x]
                         dq.append((ny, nx))
-        self.fw_dist = dist
-        # store as float cell-center coords for direction math
-        self.fw_nearest_x = (nx_arr.astype(np.float32) + 0.5)
-        self.fw_nearest_y = (ny_arr.astype(np.float32) + 0.5)
+        # store nearest as float cell-center coords for direction math
+        return dist, (nx_arr.astype(np.float32) + 0.5), (ny_arr.astype(np.float32) + 0.5)
+
+    # ------------------------------------------------------------------ freshwater fields
+    def _build_freshwater_fields(self) -> None:
+        """Nearest-freshwater fields for perception (direction + distance to drink).
+
+        Stored as cell-center coordinates (``fw_nearest_x/y``) and a distance field
+        (``fw_dist`` in cell units; inf where no freshwater is reachable).
+        """
+        self.fw_dist, self.fw_nearest_x, self.fw_nearest_y = \
+            self._nearest_source_fields(self.freshwater)
 
     # ------------------------------------------------------------------ sampling
     def world_to_cell(self, x, y):
