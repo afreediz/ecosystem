@@ -36,23 +36,31 @@ These decisions shape everything else and exist to protect the long-term (neural
    exactly what you measure.
 
 2. **The brain↔world contract is the spine.** Every decision flows through
-   `decide(obs) → act` over batched `(N, 29)` observation / `(N, 5)` action matrices. The
-   brain sees **only** the 29-dim observation — no hidden world access. This is the seam a
-   neural network slots into.
+   `decide(obs_by_species, idx) → act`. Each species gets its own `Observation` — egocentric
+   perception **grids** `(N, C, K, K)` (CNN-channel-ready) plus a small scalar vector
+   `(N, 11)` — and the brain returns the `(len(idx), 5)` action matrix aligned to the
+   **global** alive ordering `idx`. The brain sees **only** the observations — no hidden world
+   access. This is the seam a neural network slots into (see §8).
 
 3. **Structure-of-Arrays (SoA).** Entity state is parallel NumPy arrays indexed by slot,
    not one object per animal. This is what makes the batched brain, vectorized perception,
    and scaling to thousands of entities natural rather than a refactor.
 
-4. **Determinism.** One seeded RNG, fixed timestep, fixed system order, iteration by slot
-   index. Same seed + same config ⇒ byte-identical run. Essential for reproducible
-   experiments.
+4. **Determinism, two independent seeds.** The **world seed** drives world generation only
+   (terrain noise *and* hydrology), so the same world seed always reproduces the same map.
+   The **run seed** drives all stochastic *dynamics* through one threaded RNG (no global
+   `np.random`); a run seed of `None` draws and records a fresh seed so each run differs.
+   With a fixed timestep, fixed system order, and iteration by slot index: same world seed +
+   same config + same run seed ⇒ byte-identical run; same world seed + a different run seed
+   ⇒ a different run on the *same* world. Essential for reproducible experiments.
 
 ---
 
 ## 3. The world
 
-Generated **once** at startup from the master seed. The world is a grid of cells
+Generated **once** at startup from the **world seed** (terrain noise + hydrology only — the
+run seed never touches it, so a world seed always reproduces the same map). The world is a
+grid of cells
 (default **208 × 117**, a 16:9 aspect to match a widescreen display, with area roughly
 equal to the old 160×160 so dynamics carry over). Arrays are indexed `[y, x]`.
 
@@ -243,7 +251,7 @@ Sheep eat vegetation, flee foxes, need water, and use the **forest cover** refug
 | Population cap | 430 |
 | Maturity age | 100 |
 | Repro cost / cooldown / litter | 0.35 energy / 150 ticks / 2 |
-| hunger / thirst / base-burn / move-cost | 0.0020 / 0.0050 / 0.0012 / 0.0020 |
+| hunger / thirst / base-burn / move-cost | 0.0020 / 0.0050 / 0.0010 / 0.0020 |
 | predation_gain | 0.72 (fraction of prey size → energy) |
 | hunt_success | 0.5 base per-tick kill prob (× aggression × scarcity) |
 | hunt_halfsat | 90 (Type III half-saturation) |
@@ -276,8 +284,12 @@ fox goes extinct at a prey trough, after which the sheep explode to their cap. T
 6. **Self-limited fox numbers.** Repro cost (0.35) + long cooldown (150) + a high repro
    threshold gene keep foxes a fraction of the prey so they can't over-crop.
 7. **Lean predator metabolism.** Fox burn/hunger ~⅓ below the prey's lets a fox ride out
-   lean periods between kills. Extremely sensitive: at base_burn 0.0015 the fox still goes
-   extinct on the default seed; 0.0012 yields robust coexistence.
+   lean periods between kills — the single most important, most sensitive persistence lever.
+   At base_burn 0.0015 the fox still goes extinct on the default seed. It was eased
+   0.0012→**0.0010** when perception became egocentric **grids**: the grid's inherent cell
+   quantization adds small noise to predator pursuit / prey fleeing that tipped the fragile
+   balance to fox extinction (~t3000) on the default seed, and the leaner burn restores the
+   endurance to ride it out (re-verified seeds 12345/7/99).
 
 **Verified:** foxes persist and sheep stay bounded well below cap in sustained oscillations
 to 8000 ticks across seeds 12345/7/99 (e.g. seed 12345: sheep ~150–350, fox ~30–90).
@@ -317,33 +329,59 @@ cloning, and the proximity-of-two-adults requirement ties directly into local pe
 
 ---
 
-## 8. Perception — local only
+## 8. Perception — local, egocentric, per-species grids
 
-Each tick, perception builds the `(N, 29)` observation matrix. The defining rule: **no
-entity ever queries a global "nearest".** Every external category is gated by the agent's
-own `sensory_range` gene; if nothing of that category is in range, the block is zeroed and
-its `present` flag is 0. Relative offsets are normalized by sensory range so the vector is
-scale-free.
+Each tick, perception builds — **per species** — a stack of **egocentric grids** plus a
+small scalar vector. This is the v1 → v2 hinge: the grids are literally CNN-channel-ready,
+the whole point of the design.
 
-The 29 dimensions:
+**The grids** are `(N, C, K, K)`: for each agent, a square window of side `K = 2·R + 1`
+cells centred on the agent, where `R = ceil(largest sensory_range across all species)` (so
+the window is a single fixed, batchable canvas — here `R = 28`, `K = 57`). Each channel is a
+raw local view of one thing. Cells beyond the agent's **own** heritable `sensory_range`
+(a cached circular eye-mask) or off-world are zeroed, so an agent only ever perceives what
+its eyes can reach. The defining rule still holds: **no entity ever queries a global
+"nearest".**
+
+Perception is **separated by species** — each carries only the channels it actually uses, so
+a future per-species CNN has no dead inputs:
+
+| Species | Channels (in order) |
+|---|---|
+| **Sheep** (5) | terrain, water, **food** (= grass field), threat (= foxes), mate |
+| **Fox** (4) | terrain, water, **food** (= exposed prey), mate |
+
+The `food` channel is unified in *position* but species-specific in *content* — vegetation
+for the herbivore, prey entities for the carnivore. Foxes have no predators, so they carry
+no threat channel.
+
+- **terrain / water** — static world fields (biome label, freshwater), sliced as an
+  egocentric window from a zero-padded copy (no per-agent index math).
+- **Sheep food** = the vegetation field itself, windowed — the brain later picks the **best
+  grass cell** within range (a faithful "best grass I can see" forage model, kept even though
+  it's slightly slower than a coarser approximation — fidelity over speed).
+- **Fox food** = **exposed** sheep marked into the window (sheep in forest cover are hidden
+  from predators — the refuge, §6.4).
+- **threat / mate** — in-range foxes / opposite-sex adult conspecifics marked into the
+  window. Threat scatter is skipped entirely when no foxes are alive; juveniles skip the mate
+  query (they can't breed) — both big savings. Entity queries go through per-species spatial
+  hashes for near-O(N) performance.
+
+**The scalars** are `(N, 11)`, identical layout for both species — the internal state and
+global env that don't belong on a spatial grid:
 
 | idx | content |
 |---|---|
 | 0–5 | internal: hunger, thirst, energy, health, age/max_age, sex |
-| 6–9 | nearest **food**: dx/r, dy/r, dist/r, present |
-| 10–13 | nearest **threat** (sheep see foxes; foxes none): dx, dy, dist, present |
-| 14–17 | nearest **mate** (opposite sex, same species, adult): dx, dy, dist, present |
-| 18–21 | nearest **freshwater**: dx, dy, dist, present |
-| 22–25 | local temperature, nutrients, elevation, moisture |
-| 26 | on/adjacent freshwater {0,1} |
-| 27–28 | time of day, season |
+| 6 | local temperature (own cell) |
+| 7–8 | time of day, season |
+| 9 | sensory_range (cells — for distance normalization & the CNN) |
+| 10 | diet (1 = carnivore) |
 
-- **Sheep food** = the **highest-vegetation cell** within the sheep's own sensory range
-  (a faithful "best grass I can see" forage model, kept even though it's slightly slower
-  than a coarser approximation — fidelity was chosen over speed).
-- **Fox food** = the nearest **exposed** sheep (those in cover are hidden).
-- **Threat / mate / fox-food** queries go through a uniform spatial hash for near-O(N)
-  performance.
+`build` returns `(obs_by_species, idx)`: a dict mapping each species to its `Observation`
+(grids + scalars + radius), and the **global** alive ordering `idx` so all downstream
+systems stay aligned to one set. Each `Observation` also carries its own `idx` (the global
+slot ids of its rows) so per-species results scatter back into the global ordering.
 
 **Why local-only:** global knowledge is omniscience and contradicts reality. Local-only
 perception is also what *creates the need for memory* later — it makes the future LSTM/memory
@@ -354,9 +392,17 @@ travel once there's memory.
 
 ## 9. The brain (hardcoded RuleBrain)
 
-v1's brain is **vectorized priority arbitration** over the whole observation matrix. It is
-stateless (no memory) and throwaway — its only job is to produce believable behaviour and
-exercise the contract. Highest applicable priority wins:
+v1's brain is **vectorized priority arbitration**, run **per species** over that species'
+observation. It is stateless (no memory) and throwaway — its only job is to produce
+believable behaviour and exercise the contract.
+
+A *rule* brain can't run a convolution, so it first **decodes** each species' grid channels
+back into the simple targets it reasons over — `nearest_in_channel` (nearest present cell →
+the nearest threat / mate / water / prey) and `best_in_channel` (highest-value cell minus a
+mild distance pull → the best grass patch). A neural brain would skip the decode and learn
+straight off the channels. Each species is decoded separately, but the explore-heading RNG
+is drawn **once over the global ordering** so partitioning perception by species doesn't
+change the run. Highest applicable priority wins:
 
 ```
 1. FLEE     — a threat within 45% of sensory range → run directly away (overrides all)
@@ -409,8 +455,8 @@ load-bearing (e.g. sleep gates the action matrix before movement reads it):
 ```
 1.  environment.update      — advance clock; recompute season/weather/temperature offsets
 2.  grid.rebuild            — spatial hashes (global + per-species) from current positions
-3.  perception.build        — the (N,29) observation matrix (local, radius-gated)
-4.  brain_system.decide     — the (N,5) action matrix
+3.  perception.build        — per-species observations (grids + scalars) + global idx
+4.  brain_system.decide     — the (len(idx),5) action matrix, aligned to the global idx
 5.  sleep.apply             — night sleepers steer to cover / bed down; gate their actions
 6.  movement.apply          — headings → positions; terrain cost; water blocks
 7.  consumption.apply       — graze / predation / drink (kills prey immediately)
@@ -447,21 +493,29 @@ A run logs one CSV row every `log_every` (10) ticks:
 ## 13. Running it
 
 ```bash
-# headless experiment (the measurement path) — deterministic given a seed
-venv/Scripts/python.exe run_experiment.py --ticks 9000 --seed 12345 --out runs/run.csv --plot
+# headless experiment (the measurement path) — reproducible given both seeds
+venv/Scripts/python.exe run_experiment.py --ticks 9000 --world-seed 12345 --seed 7 --out runs/run.csv --plot
+
+# same fixed world, but a fresh random run (the resolved seed is printed so you can replay it)
+venv/Scripts/python.exe run_experiment.py --ticks 9000 --world-seed 12345
 
 # live viewer (needs an OpenGL display) — same sim core, observer only
-venv/Scripts/python.exe run_live.py --seed 12345 --scale 5 --spf 2
+venv/Scripts/python.exe run_live.py --world-seed 12345 --seed 7 --scale 5 --spf 2
 
 # re-plot an existing CSV
 venv/Scripts/python.exe -m analysis.plots runs/run.csv --out analysis/out
 ```
 
+`--world-seed` fixes terrain + rivers; `--seed` fixes the run dynamics (omit it for a random,
+non-reproducible run — the resolved seed is printed at startup).
+
 The live viewer adds inspection controls (pause, speed, zoom/pan, vegetation overlay,
 season fast-forward/pause, manual spawning, a night-dimming overlay, male markers and a rose
-mating tint) — all cosmetic; none of it feeds back into the sim, and manual spawning is the
-only thing that breaks reproducibility (it draws from the master RNG), which is why the
-headless path never touches it.
+mating tint). New: **left-click any animal to inspect its perception** — a ring marks the
+selected agent and a top-right panel renders its egocentric grid channels live (terrain /
+water / food / threat / mate, adapting to the species), the agent at the centre. All of it is
+cosmetic; none feeds back into the sim, and manual spawning is the only thing that breaks
+reproducibility (it draws from the run RNG), which is why the headless path never touches it.
 
 ---
 
@@ -491,8 +545,10 @@ headless path never touches it.
 Recorded so they aren't lost — these are deferred, and v1 is built not to preclude them:
 
 - **Neural brains** (the whole roadmap: MLP → LSTM/memory → CNN retina → GNN over body
-  graph → RL + neuroevolution). The `decide(obs)→act` contract + batched BrainSystem is the
-  seam they slot into.
+  graph → RL + neuroevolution). The `decide(obs_by_species, idx)→act` contract + batched
+  BrainSystem is the seam they slot into — and the per-species `(N, C, K, K)` perception
+  grids are already exactly a CNN's channel-stack input (the rule brain only decodes them
+  because it can't convolve).
 - **Memory / learning** — made meaningful precisely by v1's local-only perception.
 - **Evolvable morphology** — `sensory_range` as a gene is the first hook.
 - **Cooperation / flocking / kin recognition.**
