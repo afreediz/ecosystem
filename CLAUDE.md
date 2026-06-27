@@ -54,21 +54,41 @@ Removing any one tends to collapse the predator. Keep them in mind before retuni
 2. **Clustered spawning** — animals start in a few tight herds/packs
    (`World.clustered_land_positions`), which bootstraps mate-finding (a lone disperser
    can't breed → Allee extinction).
-3. **Prey refuge** — `World.cover` (forest+mountain): sheep there are invisible/uncatchable
-   to foxes (`perception` fox-food + `consumption` predation both skip covered sheep). This
-   is the prey reservoir that prevents total prey collapse.
+3. **Prey refuge** — `World.cover` (**forest only, ~30% of land**): sheep there are
+   invisible/uncatchable to foxes (`perception` fox-food + `consumption` predation both skip
+   covered sheep). This reservoir prevents total prey collapse. **Sizing matters a lot:** it
+   was forest+mountain (~40%), which made the refuge so large that foxes could never crop
+   enough prey — the predator starved to extinction and the prey then exploded to the cap.
+   Dropping bare/rocky mountain (now forest only) shrank it to ~30%, the level that keeps
+   prey safe from extinction *and* leaves foxes enough huntable range to persist. Too small
+   (≤25%) instead lets foxes over-crop the prey, crash it, and starve. ~30% is the sweet spot.
 4. **Fear distance** — sheep flee only when a fox is within `_FLEE_TRIGGER` of sensory
    range (`brain.py`), not for any fox in sight. Constant fleeing would stop prey
    eating/breeding entirely.
 5. **Type III functional response** — `consumption.py` scales fox kill probability by
    `n_sheep² / (n_sheep² + hunt_halfsat²)`, so predation drops sharply when prey is scarce
-   (a low-density refuge). This converts runaway crashes into a bounded cycle.
-6. **Self-limited fox numbers** — high fox `repro_threshold` gene + cost + cooldown keep
-   the predator a small fraction of the prey, so prey isn't over-cropped.
+   (a low-density refuge). This is **stabilizing — do not over-weaken it.** It seems like
+   "buffing the fox" to lower `hunt_halfsat` (90) so foxes hunt better at low prey, but that
+   backfires: foxes then finish off the prey during a trough and starve. Higher half-sat =
+   gentler, more persistent cycle. Counterintuitively the *least* aggressive setting survives.
+6. **Self-limited fox numbers** — fox `repro_cost` (0.35) + cooldown (150) + `repro_threshold`
+   gene (0.62–0.82) keep the predator a fraction of the prey so it can't over-crop. These are
+   *eased* from the original (cooldown 180, threshold 0.68–0.85, cap 350→430) so foxes can
+   mount a numerical response and recover from troughs — but `repro_cost` is kept as the brake.
+7. **Lean predator metabolism** — fox `base_burn`/`move_cost`/`hunger_rate` run ~⅓ below the
+   prey's (0.0012/0.0020/0.0020) so a fox can ride out lean periods between kills instead of
+   starving the moment prey dips. **This is the single most important — and most sensitive —
+   persistence lever:** at `base_burn` 0.0015 the predator still goes extinct on the default
+   seed; 0.0012 yields robust coexistence. Retune it gently and always re-run before trusting.
 
-With the default seed (12345) this yields rich predator–prey oscillations (sheep ~50–600,
-fox ~3–80) for ~10k ticks, then the predator typically goes extinct at a deep trough — a
-realistic outcome. The food-perception "best grass cell within sensory_range" is preserved
+With these, foxes **persist** (they no longer go extinct at the first deep trough) and the
+sheep stay bounded well below their cap, in sustained predator–prey oscillations. Verified to
+8000 ticks across seeds 12345/7/99: e.g. seed 12345 sheep ~150–350 & fox ~30–90; seed 99
+sheep ~300–400 & fox ~50–70 (exact levels are seed-dependent — wetter worlds carry more of
+both). The earlier symptom — sheep exploding to the cap while foxes stayed tiny — was the
+*downstream* effect of the predator going extinct; the cure was fox persistence (3/6/7), not
+a bigger fox boom (which only deepens the overshoot-and-crash). The food-perception "best
+grass cell within sensory_range" is preserved
 (faithful, slightly slower) per an explicit decision to favor fidelity over speed.
 
 ## Layout
