@@ -5,7 +5,7 @@ OBSERVER ONLY -- it never mutates sim state. The world is rendered once into a b
 texture; entities are drawn each frame as batched point clouds (one call per species).
 
 Controls:
-  SPACE        pause/resume            UP/DOWN     steps-per-frame +/-
+  SPACE        pause/resume            UP/DOWN     speed up / slow down (x2 / /2)
   +/- or wheel zoom in/out             drag mouse  pan
   WASD         pan                     0           reset view (fit whole map)
   V            toggle vegetation overlay tint
@@ -25,7 +25,7 @@ from sim.world import BIOME_COLORS
 class EcosystemViewer(arcade.Window):
     scale = 4
 
-    def __init__(self, cfg: Config | None = None, scale: int = 4, steps_per_frame: int = 1):
+    def __init__(self, cfg: Config | None = None, scale: int = 4, steps_per_frame: float = 1.0):
         cfg = cfg or Config()
         self.sim = Simulation(cfg)
         self.scale = scale
@@ -44,7 +44,8 @@ class EcosystemViewer(arcade.Window):
         self.background_color = arcade.color.BLACK
 
         self.paused = False
-        self.steps_per_frame = steps_per_frame
+        self.steps_per_frame = float(steps_per_frame)
+        self._step_accum = 0.0   # carries fractional steps across frames
         self.show_veg = True
 
         # World camera (zoom/pan) for terrain + entities; GUI camera (fixed) for the HUD.
@@ -92,7 +93,10 @@ class EcosystemViewer(arcade.Window):
     def on_update(self, dt: float):
         if self.paused:
             return
-        for _ in range(self.steps_per_frame):
+        self._step_accum += self.steps_per_frame
+        n = int(self._step_accum)
+        self._step_accum -= n
+        for _ in range(n):
             self.sim.step()
 
     def _world_to_screen(self, x: np.ndarray, y: np.ndarray):
@@ -130,7 +134,7 @@ class EcosystemViewer(arcade.Window):
         env = self.sim.env
         from sim.environment import WEATHER_NAMES
         lines = [
-            f"tick {self.sim.tick}   {'PAUSED' if self.paused else f'x{self.steps_per_frame}'}"
+            f"tick {self.sim.tick}   {'PAUSED' if self.paused else f'x{self.steps_per_frame:g}'}"
             f"   zoom {self.world_camera.zoom / self._fit_zoom():.1f}x",
             f"sheep {s.get('n_sheep', 0)}   fox {s.get('n_fox', 0)}   veg {s.get('veg_biomass', 0):.0f}",
             f"day {env.time_of_day:.2f}  season {env.season:.2f}  weather {WEATHER_NAMES[env.weather]}",
@@ -162,9 +166,9 @@ class EcosystemViewer(arcade.Window):
         if key == arcade.key.SPACE:
             self.paused = not self.paused
         elif key == arcade.key.UP:
-            self.steps_per_frame = min(50, self.steps_per_frame + 1)
+            self.steps_per_frame = min(64.0, self.steps_per_frame * 2)
         elif key == arcade.key.DOWN:
-            self.steps_per_frame = max(1, self.steps_per_frame - 1)
+            self.steps_per_frame = max(1 / 64, self.steps_per_frame / 2)
         elif key in (arcade.key.PLUS, arcade.key.EQUAL, arcade.key.NUM_ADD):
             self._zoom_at(self.width / 2, self.height / 2, 1.25)
         elif key in (arcade.key.MINUS, arcade.key.NUM_SUBTRACT):
