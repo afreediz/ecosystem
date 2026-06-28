@@ -1,0 +1,177 @@
+"""Simulation: owns world + entities + systems; exposes ``step(dt)`` (§7.4 of v1.md).
+
+Headless and deterministic. A single seeded RNG (from config) is threaded into every
+system that needs randomness. This module imports NOTHING from render/.
+
+Fixed tick order:
+  1 environment.update      5 movement.apply        9 vegetation.grow
+  2 grid.rebuild            6 consumption.apply     10 logger.record (caller)
+  3 perception.build        7 metabolism.apply
+  4 brain_system.decide     8 reproduction.apply
+"""
+from __future__ import annotations
+
+import numpy as np
+
+from config import Config, SHEEP, FOX
+from sim.world import World
+from sim.environment import Environment
+from sim.entities import Entities
+from sim.grid import SpatialGrid
+from sim.perception import Perception
+from sim.brain import RuleBrain
+from sim.systems.brain_system import BrainSystem
+from sim.systems import movement, consumption, metabolism, reproduction, vegetation
+from sim import genome as gn
+
+
+class Simulation:
+    def __init__(self, cfg: Config | None = None):
+        self.cfg = cfg or Config()
+        self.rng = self.cfg.make_rng()
+
+        # world is generated once from the master seed
+        self.world = World(self.cfg.world, self.rng)
+        self.env = Environment(self.cfg.env, self.rng)
+        self.entities = Entities(self.cfg)
+
+        # vegetation per-cell field (owned here; mutated by the vegetation system)
+        self.veg = vegetation.initial_field(self.world, self.rng)
+
+        # spatial grids: one global (all animals) + one per species, rebuilt each tick
+        cell = self.cfg.sim.grid_cell_size
+        self.grid = SpatialGrid(self.world.w, self.world.h, cell)
+        self._species_grids = {
+            SHEEP: SpatialGrid(self.world.w, self.world.h, cell),
+            FOX: SpatialGrid(self.world.w, self.world.h, cell),
+        }
+
+        self.perception = Perception(self.cfg, self.world, self.entities, self.grid, self.env)
+        self.brain = RuleBrain(self.rng)
+        self.brain_system = BrainSystem(self.brain)
+
+        self.tick = 0
+        # per-tick stats populated by step() for the logger / HUD
+        self.stats = {}
+
+        self._seed_population()
+
+    # ------------------------------------------------------------------ setup
+    def _seed_population(self):
+        # Spawn each species in a handful of tight herds/packs (not scattered uniformly):
+        # group starts bootstrap mate-finding and form persistent breeding demes, which is
+        # what lets the predator avoid the lone-disperser extinction trap.
+        cluster_cfg = {SHEEP: (8, 6.0), FOX: (5, 4.0)}
+        for species_id in (SHEEP, FOX):
+            spec = self.cfg.species[species_id]
+            n = spec.init_count
+            n_clusters, spread = cluster_cfg[species_id]
+            genomes = gn.random_genomes(spec, n, self.rng)
+            pos = self.world.clustered_land_positions(
+                n, self.rng, n_clusters=n_clusters, spread=spread, near_freshwater=True)
+            # Seed founders as ADULTS (age from maturity up to ~half their lifespan) so the
+            # population can breed from tick 0. Spawning everyone at age 0 leaves a long
+            # juvenile window in which the founders die off before they can reproduce.
+            ages = self.rng.uniform(spec.maturity_age, spec.maturity_age * 3.0,
+                                    size=n).astype(np.float32)
+            self.entities.spawn(spec, genomes, pos, self.rng, energy=0.8, age=ages)
+
+    def _rebuild_grids(self):
+        ent = self.entities
+        alive = ent.alive_indices()
+        self.grid.rebuild(alive, ent.pos_x, ent.pos_y)
+        for sid, g in self._species_grids.items():
+            sidx = np.nonzero(ent.species_mask(sid))[0]
+            g.rebuild(sidx, ent.pos_x, ent.pos_y)
+
+    # ------------------------------------------------------------------ tick
+    def step(self, dt: float | None = None):
+        dt = self.cfg.sim.dt if dt is None else dt
+        ent = self.entities
+        world = self.world
+
+        # 1. environment
+        self.env.update(dt)
+        temp_field = self.env.temperature_field(world.static_temp)
+
+        # 2. spatial hashes
+        self._rebuild_grids()
+
+        # wire per-tick context into perception
+        self.perception._species_grids = self._species_grids
+        self.perception.veg = self.veg
+
+        # 3. perception -> obs matrix (LOCAL, radius-gated)
+        obs, idx = self.perception.build(temp_field)
+
+        # 4. batched brain decision
+        act = self.brain_system.decide(obs)
+
+        # 5. movement
+        movement.apply(self.cfg, world, ent, idx, act, self.rng)
+
+        # 6. consumption (grids may now be slightly stale re: positions, fine for adjacency
+        #    checks which we recompute exactly). Predation kills prey slots immediately.
+        killed, n_drink, n_graze, n_pred = consumption.apply(
+            self.cfg, world, ent, idx, act, self.veg, self._species_grids, self.rng)
+
+        # drop dead prey from the tick's working set so later systems skip them
+        if killed.shape[0] > 0:
+            alive_mask = ent.alive[idx]
+            idx = idx[alive_mask]
+            act = act[alive_mask]
+
+        # 7. metabolism (energy/hunger/thirst/health/aging/death)
+        causes = metabolism.apply(self.cfg, world, ent, idx, temp_field, self.env, self.rng)
+
+        # drop dead from the working set before reproduction
+        alive_mask = ent.alive[idx]
+        idx = idx[alive_mask]
+        act = act[alive_mask]
+
+        # 8. reproduction
+        births = reproduction.apply(self.cfg, world, ent, idx, act,
+                                    self._species_grids, self.rng)
+
+        # 9. vegetation growth
+        vegetation.grow(self.cfg, world, self.env, self.veg, dt)
+
+        # 10. stats for logger / HUD
+        self.tick += 1
+        deaths_total = sum(causes.values()) + n_pred
+        self.stats = {
+            "tick": self.tick,
+            "n_sheep": ent.count_species(SHEEP),
+            "n_fox": ent.count_species(FOX),
+            "veg_biomass": float(self.veg.sum()),
+            "births": births,
+            "deaths": deaths_total,
+            "death_starve": causes["starve"],
+            "death_thirst": causes["thirst"],
+            "death_age": causes["age"],
+            "death_health": causes["health"],
+            "death_predation": n_pred,
+            "n_drink": n_drink,
+            "n_graze": n_graze,
+        }
+        return self.stats
+
+    # ------------------------------------------------------------------ analysis helpers
+    def trait_means(self, species_id: int) -> dict:
+        """Mean of each heritable gene over the living members of a species."""
+        ent = self.entities
+        mask = ent.species_mask(species_id)
+        out = {}
+        if mask.sum() == 0:
+            for name in gn.GENE_NAMES:
+                out[name] = float("nan")
+            return out
+        g = ent.genome[mask]
+        for name in gn.GENE_NAMES:
+            out[name] = float(gn.gene(g, name).mean())
+        return out
+
+    @property
+    def populations(self) -> dict:
+        return {"sheep": self.entities.count_species(SHEEP),
+                "fox": self.entities.count_species(FOX)}
