@@ -358,7 +358,7 @@ max_speed          0.778     1.260     A     0.778
 sensory_range      9.601    14.426     A     9.601
 metabolism_rate    1.032     1.286     B     1.300  ← MUTATED (1.286 + nudge, clamped to 1.3 ceiling)
 size               1.165     1.031     A     1.165
-max_age         2134.5    1592.8       B  1592.8
+max_age           2134.5    1592.8     B     1592.8
 repro_threshold    0.725     0.659     B     0.659
 flee_distance      0.490     0.827     A     0.490
 chronotype        -0.040    -0.046     A    -0.040
