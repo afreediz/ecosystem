@@ -37,6 +37,9 @@ class Simulation:
 
         # vegetation per-cell field (owned here; mutated by the vegetation system)
         self.veg = vegetation.initial_field(self.world, self.rng)
+        # when True, vegetation stops regrowing (grazing still depletes it) -- a live
+        # viewer toggle; defaults off so headless runs are unaffected.
+        self.veg_growth_paused = False
 
         # spatial grids: one global (all animals) + one per species, rebuilt each tick
         cell = self.cfg.sim.grid_cell_size
@@ -168,8 +171,9 @@ class Simulation:
         births = reproduction.apply(self.cfg, world, ent, idx, act,
                                     self._species_grids, self.rng)
 
-        # 9. vegetation growth
-        vegetation.grow(self.cfg, world, self.env, self.veg, dt)
+        # 9. vegetation growth (skipped when paused: grazed cells stay depleted)
+        if not self.veg_growth_paused:
+            vegetation.grow(self.cfg, world, self.env, self.veg, dt)
 
         # 10. stats for logger / HUD
         self.tick += 1

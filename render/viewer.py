@@ -7,7 +7,8 @@ texture; entities are drawn each frame as batched point clouds (one call per spe
 Controls:
   SPACE        pause/resume            UP/DOWN     speed up / slow down (x2 / /2)
   +/- or wheel zoom in/out             right-drag  pan
-  0            reset view (fit map)    V           toggle vegetation overlay tint
+  0            reset view (fit map)    middle-drag pan
+  V            toggle veg overlay      Ctrl+V      freeze/unfreeze veg regrowth
   S            fast-forward season     Ctrl+S      pause/resume season
   Shift+S      spawn sheep at cursor   Shift+F     spawn fox at cursor
   ESC          quit
@@ -176,7 +177,8 @@ class EcosystemViewer(arcade.Window):
         lines = [
             f"tick {self.sim.tick}   {'PAUSED' if self.paused else f'x{self.steps_per_frame:g}'}"
             f"   zoom {self.world_camera.zoom / self._fit_zoom():.1f}x",
-            f"sheep {s.get('n_sheep', 0)}   fox {s.get('n_fox', 0)}   veg {s.get('veg_biomass', 0):.0f}",
+            f"sheep {s.get('n_sheep', 0)}   fox {s.get('n_fox', 0)}   veg {s.get('veg_biomass', 0):.0f}"
+            f"{'  [veg frozen]' if self.sim.veg_growth_paused else ''}",
             f"{daytime_name(env.time_of_day)} ({env.time_of_day:.2f})   "
             f"{season_tag} ({env.season:.2f})   weather {WEATHER_NAMES[env.weather]}",
             f"births {s.get('births', 0)}  deaths {s.get('deaths', 0)} "
@@ -198,8 +200,13 @@ class EcosystemViewer(arcade.Window):
     # ------------------------------------------------------------------ input
     def on_resize(self, width: int, height: int):
         super().on_resize(width, height)
+        if not hasattr(self, "gui_camera"):
+            return   # a resize event can fire during window construction, before setup
+        # GUI camera must keep (0,0) at the bottom-left after a resize (position=True),
+        # else the HUD's screen coords fall outside the view and it vanishes in fullscreen.
+        self.gui_camera.match_window(position=True)
         self.world_camera.match_window()
-        self.gui_camera.match_window()
+        self._reset_view()   # refit the whole map into the new window size
 
     def on_mouse_motion(self, x, y, dx, dy):
         self._mouse_x, self._mouse_y = x, y
@@ -262,7 +269,10 @@ class EcosystemViewer(arcade.Window):
         elif key == arcade.key.F and shift:
             self._spawn_at_mouse(FOX)                    # Shift+F: spawn fox at cursor
         elif key == arcade.key.V:
-            self.show_veg = not self.show_veg
+            if ctrl:
+                self.sim.veg_growth_paused = not self.sim.veg_growth_paused  # Ctrl+V
+            else:
+                self.show_veg = not self.show_veg                            # V: overlay
         elif key == arcade.key.ESCAPE:
             self.close()
 
