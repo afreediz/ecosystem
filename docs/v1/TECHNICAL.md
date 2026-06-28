@@ -12,7 +12,7 @@
 
 ```
 ecosystem/
-├── config.py              # ALL tunables (dataclasses) + the master seed + RNG factory
+├── config.py              # ALL tunables (dataclasses) + world seed + run seed + RNG factory
 ├── run_experiment.py      # entry: headless, fast-forward, writes CSV  (the measurement path)
 ├── run_live.py            # entry: Arcade window, watch live  (observer)
 ├── v1.md                  # the authoritative build spec
@@ -25,8 +25,8 @@ ecosystem/
 │   ├── environment.py     # clock, season, weather, temperature offsets
 │   ├── entities.py        # Structure-of-Arrays entity store + free list
 │   ├── genome.py          # gene layout, mutation, crossover
-│   ├── perception.py      # builds the (N,29) observation matrix (local only)
-│   ├── brain.py           # Brain interface + RuleBrain (hardcoded)
+│   ├── perception.py      # builds per-species egocentric grids + scalars (local only)
+│   ├── brain.py           # Brain interface + RuleBrain (hardcoded) + grid decoders
 │   ├── grid.py            # uniform spatial hash for radius queries
 │   └── systems/
 │       ├── brain_system.py    # global batched obs→act wrapper
@@ -99,13 +99,22 @@ act = act[alive_mask]
 to the same rows of `obs` / `act`, and the explicit re-filter after deaths is the only place
 mortality interacts with ordering.
 
-### 2.4 Single threaded RNG, no globals
+### 2.4 Single threaded RNG, no globals — and two independent seeds
 
-One `numpy.random.Generator` is created in `Config.make_rng()` and passed into every system
-that needs randomness. **No module ever calls `np.random` directly.** **Why:** determinism.
-Same seed + same config ⇒ identical run, which the headless experiment path depends on. The
-*only* deliberate exception is the live viewer's manual-spawn feature (it draws from the
-master RNG, breaking reproducibility — which is precisely why the headless path never uses it).
+There are **two seeds**, deliberately separate:
+- **World seed** (`cfg.world.seed`) drives world generation *only* — terrain noise **and**
+  hydrology. `World` takes no RNG; it derives its own generator from the world seed, so the
+  map never depends on the run dynamics.
+- **Run seed** (`cfg.seed`) drives all stochastic *dynamics*. One `numpy.random.Generator` is
+  created in `Config.make_rng()` and passed into every system that needs randomness. **No
+  module ever calls `np.random` directly.** A run seed of `None` makes `make_rng` draw a fresh
+  random seed and **record it back** onto `cfg.seed` (so each run differs but is still
+  reproducible after the fact — the entry points print it).
+
+**Why:** same world seed + same config + same run seed ⇒ identical run; same world seed + a
+different run seed ⇒ a different run on the *same* world. The *only* deliberate exception is
+the live viewer's manual-spawn feature (it draws from the run RNG, breaking reproducibility —
+which is precisely why the headless path never uses it).
 
 ### 2.5 Brain proposes, systems enforce
 
@@ -124,18 +133,22 @@ Everything tunable is a dataclass field; there are no magic numbers scattered in
 
 | Dataclass | Holds |
 |---|---|
-| `WorldConfig` | size, seed, noise octaves/scales, sea level, river sources, biome thresholds, lapse rate, moisture-boost radius |
+| `WorldConfig` | size, **world seed**, noise octaves/scales, sea level, river sources, biome thresholds, lapse rate, moisture-boost radius |
 | `EnvConfig` | day/year length, weather change rate, diurnal/seasonal amplitudes, nutrient regen, heat thirst factor, **and all sleep parameters** |
 | `SpeciesConfig` | per-species: init count, gene ranges, maturity, repro cost/cooldown/litter, hunger/thirst/burn/move rates, population cap, mutation rate/strength, need thresholds, eat value, predation gain, hunt success, hunt halfsat |
 | `SimConfig` | dt, grid cell size, max entities, log interval, vegetation rates, eat/repro radii, food threshold, mating-glow duration |
-| `Config` | composes the four above + master seed; `make_rng()` returns the seeded Generator |
+| `Config` | composes the four above + the **run seed** (`seed: int \| None`); `make_rng()` returns the seeded Generator |
 | `GeneRange` | `(lo, hi)` clamp bounds for one gene |
 
 Key helpers:
 - `default_species() -> {SHEEP: SpeciesConfig, FOX: SpeciesConfig}` — builds both species with
   their gene-range dicts. This is where the calibrated numbers live.
-- `make_config(seed=None, **world_overrides) -> Config` — convenience builder used by the
-  entry points; a `seed` override updates both the master seed and the world seed together.
+- `make_config(world_seed=None, seed=None, **world_overrides) -> Config` — convenience builder
+  used by the entry points. `world_seed` sets `cfg.world.seed` (terrain/rivers); `seed` sets
+  the run seed (`None` ⇒ random per run). They are independent (§2.4).
+- `Config.make_rng()` — returns the seeded run `Generator`. If `cfg.seed is None` it first
+  draws a random seed and **writes it back** onto `cfg.seed`, so the resolved value is
+  recoverable after the run.
 
 Species ids are module constants: `PLANT = -1`, `SHEEP = 0`, `FOX = 1`. They double as
 indices, so `cfg.species[SHEEP]` works directly.
@@ -147,15 +160,20 @@ no import-time side effects beyond constructing plain objects.
 
 ## 4. `sim/world.py` — the static world
 
-`World(cfg: WorldConfig, rng)` builds everything once in `__init__`. All arrays are `[y, x]`.
+`World(cfg: WorldConfig)` builds everything once in `__init__` — **it takes no RNG**. All
+arrays are `[y, x]`. Everything that needs randomness is derived *solely* from the world seed
+(`cfg.seed`), so the map is independent of the run dynamics (§2.4).
 
 Construction sequence:
-1. Two independent `OpenSimplex` generators seeded off the master seed (`seed`, `seed+9973`)
-   so elevation and moisture are uncorrelated.
+1. Two independent `OpenSimplex` generators seeded off the world seed (`seed`, `seed+9973`)
+   so elevation and moisture are uncorrelated, plus a `world_rng =
+   np.random.default_rng(cfg.seed)` for hydrology's random river sources — **never** the
+   shared run RNG (which would otherwise make the same world's map drift between runs).
 2. `_fractal_noise(gen, w, h, scale, octaves)` — module function: sums octaves (amp ×0.5,
    freq ×2 each), normalizes to [0,1]. Uses `gen.noise2array` (the vectorized OpenSimplex
    grid call) for speed rather than scalar `noise2`.
-3. `hydrology.generate(...)` → ocean/river/lake/beach/freshwater/water_any + moisture boost.
+3. `hydrology.generate(elevation, cfg, world_rng)` → ocean/river/lake/beach/freshwater/
+   water_any + moisture boost.
 4. Moisture re-clamped after the freshwater boost.
 5. Static temperature: latitude gradient (top edge warm) minus `elevation × lapse_rate`,
    normalized.
@@ -321,68 +339,93 @@ a pre-filtered grid.
 
 ---
 
-## 10. `sim/perception.py` — the observation builder
+## 10. `sim/perception.py` — the per-species grid builder
 
-`Perception(cfg, world, entities, grid, env)`; `build(temp_field) -> (obs, idx)` returns the
-`(N, 29)` matrix and the aligned alive-index array. Per-tick context (`_species_grids`, `veg`)
-is wired in by `Simulation.step` before the call.
+`Perception(cfg, world, entities, grid, env)`; `build(temp_field) -> (obs_by_species, idx)`
+returns a `{species_id: Observation}` dict and the **global** alive-index array. Per-tick
+context (`_species_grids`, `veg`) is wired in by `Simulation.step` before the call.
 
-`build` fills the matrix in blocks:
-- **Internal (0–5)** — direct array reads (`hunger`, `thirst`, `energy`, `health`,
-  `age/max_age`, `sex`).
-- **Water (18–21)** — `_fill_water`: reads the precomputed `world.fw_dist` / `fw_nearest_*`
-  fields, gates by `dist ≤ sensory_range`. No per-agent search.
-- **Food (6–9)** — `_fill_food`:
-  - Sheep: `_sheep_food_vectorized` — a fully batched "best grass cell within my sensory
-    range" computation using a per-agent offset **stencil** (a `(K,K)` neighborhood, `K =
-    2·R+1` where `R` is the max sheep sensory range). For all sheep at once it scores every
-    in-range, above-threshold veg cell as `veg − 0.02·dist`, takes the argmax, and writes the
-    normalized direction. **Why vectorized-but-faithful:** semantics are exactly "best grass
-    I can actually see", deliberately kept over a coarser/faster approximation (fidelity over
-    speed, an explicit decision).
-  - Fox: nearest **exposed** sheep via the sheep grid (`_nearest_from_grid` with
-    `exclude_cover=True` — sheep in cover are hidden from predators).
-- **Threat & mate (10–17)** — `_fill_threat_and_mate`:
-  - Threat (sheep see foxes): skipped entirely when no foxes are alive (avoids N pointless
-    queries). Foxes have no threat block.
-  - Mate: `_nearest_mate` — nearest in-range conspecific, opposite sex, adult. **Juveniles
-    skip the query** (only adults can mate), a big saving in a young-skewed population.
-- **Local env (22–28)** — direct field samples at the agent's cell + the global clock/season
-  scalars.
+**`Observation`** (a `__slots__` class) carries `grids` `(N, C, K, K)` float32, `scalars`
+`(N, SCALAR_DIM=11)` float32, `radius` (the window half-width `R`), `idx` (the global slot
+ids of its rows, for scatter-back), and `species`.
 
-Helper `_nearest_from_grid(obs, k, x, y, r, grid, base, exclude_slot, exclude_cover)` writes
-the standard 4-slot `(dx/r, dy/r, dist/r, present)` block for any category given a grid.
+**Window geometry, set once in `__init__`:** `R = ceil(largest sensory_range across all
+species)`, `K = 2·R + 1`. A `_d_cell` `(K,K)` distance-from-centre stencil and a
+`_mask_cache` of circular eye-masks (one per integer radius `0..R`) are precomputed — an
+agent uses the mask for `round(sensory_range)`, so there's no per-agent disc recompute.
+Static fields (terrain = normalized biome label, water = freshwater) are **zero-padded by
+`R`** so each agent's `K×K` window is a plain `sliding_window_view` slice — no per-agent
+index math.
 
-**Why the strict local gating with no global fallback:** it is the architectural promise that
-makes future memory meaningful (see OVERVIEW §8). Any code that "peeked" globally would
-quietly break that.
+**`build`** computes the global `idx`, pads the vegetation field once for the tick, then calls
+`_build_species(sid, sp_idx, …)` for SHEEP and FOX. Output buffers are lazily grown per
+species (`_ensure_buffers`). Each `_build_species`:
+- **field channels** (`_field`): terrain (ch 0) and water (ch 1) for both species — the
+  padded-field window times the agent's eye-mask.
+- **food + entity channels** (species-specific):
+  - **Sheep** — food (ch `SH_FOOD`) = the windowed **vegetation field**; then
+    `_scatter_predators` marks in-range foxes into the threat channel (skipped entirely when
+    no foxes are alive), and `_scatter_mates` marks opposite-sex adult conspecifics.
+  - **Fox** — `_scatter_prey` marks in-range **exposed** sheep into the food channel
+    (`world.in_cover` filters out sheep hidden in the refuge); `_scatter_mates` for mates. No
+    threat channel.
+- **scalars** — direct reads: hunger, thirst, energy, health, age/max_age, sex, own-cell
+  temperature, time_of_day, season, `sensory_range` (for distance normalization & the CNN),
+  and `diet` (1 for fox).
+
+Helpers:
+- `_field(src_pad, cx, cy, masks)` — `sliding_window_view(src_pad,(K,K))[cy,cx] * masks`.
+- `_scatter_predators / _scatter_prey / _scatter_mates` — per-agent `query_radius` on the
+  relevant species grid, filtered (cover for prey; opposite-sex adult ≠ self for mates), then
+  `_scatter` writes a `1.0` into the window cell of each in-window candidate. Juveniles skip
+  the mate query (they can't breed).
+
+Layout constants are the single source of truth: `SH_TERRAIN…SH_MATE` (5), `FX_TERRAIN…
+FX_MATE` (4), `CHANNEL_NAMES`, `SPECIES_N_CHANNELS`, and the scalar indices `S_HUNGER…S_DIET`
+(`SCALAR_DIM = 11`).
+
+**Why per-species grids:** they are literally a CNN's channel-stack, and giving each species
+only the channels it uses means a future per-species CNN has zero dead inputs. **Why strict
+local gating with no global fallback:** it is the architectural promise that makes future
+memory meaningful (OVERVIEW §8) — any code that "peeked" globally would quietly break it.
 
 ---
 
 ## 11. `sim/brain.py` — the decision contract
 
-The spine. `OBS_DIM = 29`, `ACT_DIM = 5`, action indices `A_DX, A_DY, A_EAT, A_DRINK,
-A_REPRO`.
+The spine. `ACT_DIM = 5`, action indices `A_DX, A_DY, A_EAT, A_DRINK, A_REPRO`.
 
 ```python
 class Brain:
-    def decide(self, obs: np.ndarray) -> np.ndarray:   # (N,29) -> (N,5)
+    def decide(self, obs_by_species, idx) -> np.ndarray:   # -> (len(idx), 5)
         raise NotImplementedError
 
 class RuleBrain(Brain):
-    def __init__(self, rng): ...
-    def decide(self, obs): ...   # vectorized priority arbitration
+    def __init__(self, rng, food_threshold=_DEFAULT_FOOD_THR): ...
+    def decide(self, obs_by_species, idx): ...   # per-species decode + arbitration
 ```
 
-`RuleBrain.decide` is fully vectorized: it unpacks the obs columns, computes a default random
-explore heading, then overlays — in increasing priority — reproduce, needs, and flee, using
-`np.where` masks throughout. The gate-tuning constants live at module top: `_ADJ_NORM`
-(0.25), `_NEED_URGENCY` (0.4), `_FLEE_TRIGGER` (0.45). See OVERVIEW §9 for the behavioural
-logic and §14 for the constants.
+**Grid decoders** (module functions, since a rule brain can't convolve):
+- `nearest_in_channel(chan)` → `(present, dx, dy, dist)` in cells: the nearest non-zero cell
+  of a `(N,K,K)` channel relative to the window centre (threat / mate / water / prey).
+- `best_in_channel(chan, thr)` → same shape, but the **highest-value** cell scored as
+  `value − 0.02·dist` over cells above `thr` — the richest grass patch in sight (faithful to
+  the old "best grass within sensory_range" rule). Both use a cached flat `_stencil(K)`.
+
+`RuleBrain.decide` allocates the global `(len(idx), 5)` act, draws the explore-heading angles
+**once over the global ordering**, then for each species calls `_decide_species` on its
+`Observation` slice and scatters the result back via `np.searchsorted(idx, obs.idx)` (so
+partitioning perception by species can't change the random stream). `_decide_species` decodes
+that species' channels (sheep: `best_in_channel` food + `nearest_in_channel` water/mate/
+threat; fox: nearest prey/water/mate, no threat), then overlays — in increasing priority —
+reproduce, needs, and flee with `np.where` masks. Gate constants at module top: `_ADJ_NORM`
+(0.25), `_NEED_URGENCY` (0.4), `_FLEE_TRIGGER` (0.45), `_DEFAULT_FOOD_THR` (0.15, overridden
+by `cfg.sim.food_eat_threshold`). See OVERVIEW §9.
 
 **Why a separate `Brain` base class for one implementation:** it *is* the contract. A
-`TorchBrain(Brain)` later implements the same `decide(obs)->act` and `BrainSystem` calls it
-identically — the entire neural roadmap hangs off this signature.
+`TorchBrain(Brain)` later implements the same `decide(obs_by_species, idx)->act`, consuming
+each species' `grids` as CNN channels, and `BrainSystem` calls it identically — the entire
+neural roadmap hangs off this signature.
 
 ---
 
@@ -391,19 +434,22 @@ identically — the entire neural roadmap hangs off this signature.
 Each is a module with one entry function. All mutate state in place and return summaries.
 
 ### 12.1 `brain_system.py`
-`BrainSystem(brain)` with `decide(obs) -> act`. A thin wrapper around `brain.decide`.
-**Why it exists at all** (it's trivial for rules): it is the *global, batched* seam — one
-call site that collects every agent's obs, produces every action, and scatters them back. A
-neural brain needs exactly this batching, so it's built now. `decide` is never a per-entity
-method.
+`BrainSystem(brain)` with `decide(obs_by_species, idx) -> act`. A thin wrapper around
+`brain.decide`. **Why it exists at all** (it's trivial for rules): it is the *global, batched*
+seam — one call site that hands the brain every species' observations and returns one action
+matrix aligned to the global `idx`. A neural brain needs exactly this batching, so it's built
+now. `decide` is never a per-entity method.
 
 ### 12.2 `sleep.py`
-`apply(cfg, world, ent, idx, act, obs, env) -> n_asleep`. Computes each animal's personal
-night window (`sleep_onset + chronotype`, shared duration), classifies it as seeking
+`apply(cfg, world, ent, idx, act, obs_by_species, env) -> n_asleep`. Computes each animal's
+personal night window (`sleep_onset + chronotype`, shared duration), classifies it as seeking
 shelter / asleep / awake, steers seekers toward `world.cover_nearest_*`, zeroes the eat/
-drink/repro gates for resting animals, and sets `ent.asleep`. A close predator
-(`obs[:,13] > 0.5 & obs[:,12] < _WAKE_THREAT`) overrides sleep. Runs **before movement** so
-its gating and `asleep` flag are read downstream. See OVERVIEW §10.
+drink/repro gates for resting animals, and sets `ent.asleep`. A close predator overrides
+sleep: it decodes the sheep observation's threat channel the same way the brain does
+(`nearest_in_channel(sheep_obs.grids[:, SH_THREAT])`, distance as a fraction of `S_SENSORY`)
+and scatters the wake flag back into the global ordering via `searchsorted` (foxes carry no
+threat channel, so they never wake to flee). Runs **before movement** so its gating and
+`asleep` flag are read downstream. See OVERVIEW §10.
 
 ### 12.3 `movement.py`
 `apply(cfg, world, ent, idx, act, rng)`. Turn-rate-limited steering (`_MAX_TURN = 0.7` rad):
@@ -456,9 +502,13 @@ ascending slot index is the simplest one that reproduces identically across runs
 
 ## 13. `sim/simulation.py` — the orchestrator
 
-`Simulation(cfg=None)` constructs the world, environment, entity store, vegetation field,
-the three spatial grids, perception, the rule brain + brain system, and seeds the founding
-population. It owns the canonical tick.
+`Simulation(cfg=None)` constructs the world (`World(cfg.world)` — world seed only, no RNG),
+environment, entity store, vegetation field, the three spatial grids, perception, the rule
+brain (`RuleBrain(rng, cfg.sim.food_eat_threshold)`) + brain system, and seeds the founding
+population. `make_rng()` resolves/records a random run seed if none was set. It owns the
+canonical tick. `step` stashes this tick's per-species observations on `self.last_obs`
+(captured **before** deaths are filtered, so each `Observation.idx` row still maps to its
+slot) — a read-only handle the live viewer's perception inspector reads.
 
 - `_seed_population()` — spawns each species in clustered herds/packs at **adult ages** near
   freshwater (the two founder mechanisms from OVERVIEW §6.4).
@@ -493,11 +543,21 @@ Rendering approach:
   state) group — with a male marker dot, a rose tint for recent breeders (`mating_glow`),
   and dimming for sleepers.
 - A **night overlay** dims the scene by `1 − light_level(time_of_day)`.
+- **Perception inspector** — left-click picks the nearest animal (`_pick_entity`, within ~14
+  screen px, else deselect). A yellow ring (`_draw_selection_ring`) tracks it, and
+  `_draw_perception_inspector` renders that agent's egocentric grid channels live in a
+  top-right panel: it looks the slot up in `sim.last_obs` for the agent's species
+  (`_selected_obs_grids`), then paints each channel into a lazily-built per-channel RGBA
+  texture (`_ensure_grid_textures` / `_update_channel_texture`) — brightness ∝ value, a white
+  marker at the centre (the agent), with the agent at the panel's centre cell. The channel
+  list (`GRID_CHANNELS_BY_SPECIES`) adapts to the species (sheep: terrain/water/food/threat/
+  mate; fox drops threat). The selection auto-clears when the inspected animal dies.
 - Dual cameras: a world camera (zoom/pan) and a fixed GUI camera for the HUD.
 
 Controls (pause, speed ×2/÷2, zoom/pan, veg overlay toggle, veg-freeze, season
-fast-forward/pause, spawn sheep/fox at cursor) are listed in the module docstring. All are
-cosmetic or explicitly out-of-band; none feed the measurement path.
+fast-forward/pause, spawn sheep/fox at cursor, **left-click to inspect perception**) are
+listed in the module docstring. All are cosmetic or explicitly out-of-band; none feed the
+measurement path (the inspector only *reads* `sim.last_obs`).
 
 **Why texture-baked terrain + point-cloud entities:** GPU does the heavy lifting; the CPU
 per-frame cost is just the entity positions and the small veg overlay, so the viewer keeps up
@@ -523,12 +583,15 @@ the `Agg` backend (headless-safe), switching to `TkAgg` only for `--show`. Runna
 
 ## 16. Entry points
 
-- **`run_experiment.py`** — `run_experiment(ticks, seed, out, log_every, ...)`: builds a
-  config, runs the headless loop (`sim.step()` + `logger.record()`), prints progress and a
-  final summary, detects total extinction and stops early. The deterministic measurement
-  path. `--plot` renders a report afterward.
-- **`run_live.py`** — parses args, lazily imports `render.viewer.run`, opens the window.
-  Shares the exact same `Simulation`.
+- **`run_experiment.py`** — `run_experiment(ticks, out, world_seed=12345, seed=None,
+  log_every, ...)`: builds a config via `make_config(world_seed=…, seed=…)`, prints the
+  resolved `world_seed`/`run_seed`, runs the headless loop (`sim.step()` + `logger.record()`),
+  prints progress and a final summary, detects total extinction and stops early. CLI:
+  `--world-seed` (default 12345) fixes the map; `--seed` (default `None`) fixes the run, or
+  omit for a random reproducible-after-the-fact run. `--plot` renders a report afterward.
+- **`run_live.py`** — CLI `--world-seed` / `--seed` (both `None` by default → default world,
+  random run), lazily imports `render.viewer.run`, opens the window. Shares the exact same
+  `Simulation`.
 
 ---
 
@@ -536,14 +599,17 @@ the `Agg` backend (headless-safe), switching to `TkAgg` only for `--show`. Runna
 
 The architecture's payoff. To add a neural brain:
 
-1. Implement `class TorchBrain(Brain)` with `decide(obs: np.ndarray) -> np.ndarray` (or a
-   torch tensor bridged to numpy). It receives the same `(N, 29)` matrix and returns `(N, 5)`.
+1. Implement `class TorchBrain(Brain)` with `decide(obs_by_species, idx) -> np.ndarray` (or a
+   torch tensor bridged to numpy). It consumes each species' `Observation.grids`
+   `(N, C, K, K)` directly as CNN channel-stacks (the rule brain only decodes them because it
+   can't convolve) plus the `(N, 11)` scalars, and returns the `(len(idx), 5)` act.
 2. Construct it in `Simulation.__init__` instead of `RuleBrain` (one line), or make it a
    config switch.
 
-Nothing else changes: perception still builds obs, `BrainSystem` still batches, the systems
-still enforce world conditions. The local-only observation, the SoA layout (matrices are
-native to torch), the batched brain seam, the `sensory_range` gene (first hook for evolvable
-perception), and the determinism harness were all chosen specifically so this is a one-file
-change rather than a rewrite. Two future learning loops are meant to stay separate and
-toggleable: within-lifetime RL and across-generation neuroevolution.
+Nothing else changes: perception still builds the per-species grids, `BrainSystem` still
+batches, the systems still enforce world conditions. The local-only egocentric grids (already
+a CNN's native input), the per-species channel split (no dead inputs), the SoA layout, the
+batched brain seam, the `sensory_range` gene (first hook for evolvable perception), and the
+two-seed determinism harness were all chosen specifically so this is a one-file change rather
+than a rewrite. Two future learning loops are meant to stay separate and toggleable:
+within-lifetime RL and across-generation neuroevolution.

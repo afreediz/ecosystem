@@ -7,8 +7,9 @@ only their **local** surroundings — so evolution and predator–prey dynamics 
 can be measured.
 
 This is **v1**: the brain is hardcoded rules, but the architecture around it (batched
-brain system, observation/action vector schemas, SoA entity store) is built so a PyTorch
-neural brain can be dropped in later with **zero sim rewrite**.
+brain system, per-species egocentric perception **grids** + scalar schemas, SoA entity
+store) is built so a PyTorch neural brain — the grids are already a CNN's channel-stack —
+can be dropped in later with **zero sim rewrite**.
 
 ## Documentation
 
@@ -33,12 +34,13 @@ pip install -r requirements.txt
 **Watch live** (Arcade observer window):
 
 ```bash
-python run_live.py                 # default seed
-python run_live.py --seed 7 --scale 5 --spf 4
+python run_live.py                              # default world, random run
+python run_live.py --world-seed 12345 --seed 7 --scale 5 --spf 4
 ```
 
-CLI flags: `--seed N` (master seed) · `--scale N` (pixels per world cell) · `--spf N`
-(sim steps per rendered frame; fractional ok, e.g. `0.25` = 1 step every 4 frames).
+CLI flags: `--world-seed N` (terrain/rivers; same world-seed ⇒ identical map) · `--seed N`
+(run dynamics; omit for a random run on that world) · `--scale N` (pixels per world cell) ·
+`--spf N` (sim steps per rendered frame; fractional ok, e.g. `0.25` = 1 step every 4 frames).
 
 ### Live viewer controls
 
@@ -56,21 +58,27 @@ CLI flags: `--seed N` (master seed) · `--scale N` (pixels per world cell) · `-
 | `Ctrl+S` | pause / resume seasonal progression (day & weather keep running) |
 | `Shift+S` | spawn a sheep at the cursor |
 | `Shift+F` | spawn a fox at the cursor |
+| left-click | inspect an animal's perception — ring it and show its egocentric grid channels |
 | `ESC` | quit |
 
 The viewer is an **observer only** — these controls never feed back into the measured
-simulation, except manual spawning (`Shift+S` / `Shift+F`), which draws from the master RNG
+simulation, except manual spawning (`Shift+S` / `Shift+F`), which draws from the run RNG
 and so breaks run reproducibility (the headless path never spawns manually).
 
 On-screen markers: a small black dot = male · a rose tint = bred in the last few ticks ·
-dimmed = asleep · the whole scene darkens at night.
+dimmed = asleep · the whole scene darkens at night. Left-click any animal to open a
+top-right panel showing its live perception grids (terrain / water / food / threat / mate).
 
 **Headless experiment** (fast-forward, writes CSV):
 
 ```bash
-python run_experiment.py --ticks 20000 --seed 12345 --out runs/run.csv
-python run_experiment.py --ticks 20000 --plot      # also render a PNG report
+python run_experiment.py --ticks 20000 --world-seed 12345 --seed 7 --out runs/run.csv
+python run_experiment.py --ticks 20000 --world-seed 12345    # random run on a fixed world
+python run_experiment.py --ticks 20000 --plot                # also render a PNG report
 ```
+
+`--world-seed` fixes the map; `--seed` fixes the run (omit for a random run — the resolved
+seed is printed at startup so you can replay it).
 
 **Analysis** (population curves, trait drift, phase plot):
 
@@ -88,20 +96,24 @@ drift (the evolution signal), and the sheep–fox phase plot (the Lotka–Volter
 - **`sim/` is pure numbers and never imports `render/`.** Both entry points share the
   exact same `sim/` core. The Arcade renderer is an optional, read-only observer.
 - **The brain↔world contract is the spine.** Every decision flows through
-  `Brain.decide(obs) -> act` over batched `(N, OBS_DIM)` / `(N, ACT_DIM)` matrices. v1's
-  `RuleBrain` is throwaway; the obs/act schemas (`sim/perception.py`, `sim/brain.py`) are
-  the real design.
+  `Brain.decide(obs_by_species, idx) -> act`: each species gets egocentric perception grids
+  `(N, C, K, K)` + a scalar vector, the brain returns the `(len(idx), ACT_DIM)` action matrix
+  aligned to the global alive ordering. v1's `RuleBrain` is throwaway; the per-species grid/
+  scalar schemas (`sim/perception.py`, `sim/brain.py`) are the real design.
 - **Entity state is Structure-of-Arrays** (`sim/entities.py`) — parallel NumPy arrays, not
   one object per entity.
-- **Perception is local-only** — animals see food/threats/mates/water only within their
-  heritable `sensory_range`; never a global "nearest". Blind time becomes exploration.
-- **Determinism**: one seeded `numpy` Generator (from `config.py`) threaded into every
-  system; fixed `dt`; iteration by slot index. Same seed + config ⇒ identical run.
+- **Perception is local-only** — each agent perceives food/threats/mates/water only within
+  its heritable `sensory_range`, as masked egocentric grids; never a global "nearest". Blind
+  time becomes exploration.
+- **Determinism, two seeds**: the **world seed** drives world generation (terrain + rivers);
+  the **run seed** drives all dynamics via one `numpy` Generator (from `config.py`) threaded
+  into every system. Fixed `dt`, iteration by slot index. Same world seed + config + run seed
+  ⇒ identical run; a different run seed ⇒ a different run on the same world.
 
 ## Layout
 
 ```
-config.py            all tunables + master seed
+config.py            all tunables + world seed + run seed
 run_live.py          Arcade window entry point
 run_experiment.py    headless CSV entry point
 sim/                 headless core (world, hydrology, environment, entities,
