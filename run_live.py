@@ -1,7 +1,10 @@
 """Entry point: watch the simulation live in an Arcade window (observer only).
 
 Shares the exact same sim/ core as run_experiment.py. Usage:
-    python run_live.py [--seed N] [--scale N] [--spf N]
+    python run_live.py [--world-seed N] [--seed N] [--scale N] [--spf N]
+
+``--world-seed`` fixes the terrain/rivers; ``--seed`` fixes the run dynamics (omit for a
+random run on that world).
 """
 from __future__ import annotations
 
@@ -12,14 +15,17 @@ from config import make_config
 
 def main():
     ap = argparse.ArgumentParser(description="Watch the ecosystem simulation live.")
-    ap.add_argument("--seed", type=int, default=None, help="master seed override")
+    ap.add_argument("--world-seed", type=int, default=None,
+                    help="world seed (terrain/rivers); omit for the default world")
+    ap.add_argument("--seed", type=int, default=None,
+                    help="run/determinism seed; omit for a random run on that world")
     ap.add_argument("--scale", type=int, default=2, help="pixels per world cell")
     ap.add_argument("--spf", type=float, default=1.0,
                     help="sim steps per rendered frame (fractional ok, e.g. 0.25 = "
                          "1 step every 4 frames, for slow observation)")
     args = ap.parse_args()
 
-    cfg = make_config(seed=args.seed) if args.seed is not None else None
+    cfg = make_config(world_seed=args.world_seed, seed=args.seed)
     # import arcade lazily so headless environments without a display can still import
     # the sim package without pulling in OpenGL.
     from render.viewer import run

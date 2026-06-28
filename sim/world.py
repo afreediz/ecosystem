@@ -53,14 +53,19 @@ def _fractal_noise(gen: OpenSimplex, w: int, h: int, scale: float, octaves: int)
 
 
 class World:
-    def __init__(self, cfg: WorldConfig, rng: np.random.Generator):
+    def __init__(self, cfg: WorldConfig):
         self.cfg = cfg
         self.w = cfg.width
         self.h = cfg.height
 
-        # independent noise generators seeded deterministically off the master seed
+        # World generation depends ONLY on the world seed, so the same world seed always
+        # yields the same terrain + rivers regardless of the run/determinism seed. The noise
+        # generators take the seed directly; hydrology (which needs randomness for river
+        # sources) gets a generator derived solely from the world seed -- never the shared
+        # run RNG, which would otherwise make the map change between runs of the same world.
         elev_gen = OpenSimplex(seed=cfg.seed)
         moist_gen = OpenSimplex(seed=cfg.seed + 9973)
+        world_rng = np.random.default_rng(cfg.seed)
 
         # --- continuous fields ---
         self.elevation = _fractal_noise(elev_gen, self.w, self.h, cfg.noise_scale,
@@ -69,7 +74,7 @@ class World:
                                   max(2, cfg.noise_octaves - 1))
 
         # --- hydrology (ocean / rivers / lakes) ---
-        hydro = hydrology.generate(self.elevation, cfg, rng)
+        hydro = hydrology.generate(self.elevation, cfg, world_rng)
         self.ocean = hydro["ocean"]
         self.river = hydro["river"]
         self.lake = hydro["lake"]
