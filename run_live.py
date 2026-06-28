@@ -13,7 +13,7 @@ from config import make_config
 def main():
     ap = argparse.ArgumentParser(description="Watch the ecosystem simulation live.")
     ap.add_argument("--seed", type=int, default=None, help="master seed override")
-    ap.add_argument("--scale", type=int, default=4, help="pixels per world cell")
+    ap.add_argument("--scale", type=int, default=2, help="pixels per world cell")
     ap.add_argument("--spf", type=float, default=1.0,
                     help="sim steps per rendered frame (fractional ok, e.g. 0.25 = "
                          "1 step every 4 frames, for slow observation)")
