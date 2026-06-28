@@ -162,18 +162,31 @@ class Config:
     env: EnvConfig = field(default_factory=EnvConfig)
     sim: SimConfig = field(default_factory=SimConfig)
     species: dict = field(default_factory=default_species)
-    seed: int = 12345
+    # Run / determinism seed: seeds ALL stochastic *dynamics* (population spawn, weather,
+    # per-tick decisions / predation / reproduction). It does NOT affect world generation --
+    # that depends only on ``world.seed`` (the world seed). ``None`` => a fresh random seed is
+    # drawn (and recorded back here) by ``make_rng`` so each run differs; an explicit value
+    # makes the run reproducible. So: same world.seed + same config + same seed => identical
+    # run; same world.seed but different seed => a different run on the SAME world.
+    seed: int | None = None
 
     def make_rng(self) -> np.random.Generator:
+        if self.seed is None:                       # resolve + record a random run seed
+            self.seed = int(np.random.default_rng().integers(0, 2**31 - 1))
         return np.random.default_rng(self.seed)
 
 
-def make_config(seed: int | None = None, **world_overrides) -> Config:
-    """Convenience builder. ``seed`` overrides both the master seed and world seed."""
+def make_config(world_seed: int | None = None, seed: int | None = None,
+                **world_overrides) -> Config:
+    """Convenience builder.
+
+    ``world_seed`` -- seeds terrain + hydrology (same world_seed => identical world).
+    ``seed``       -- run/determinism seed (see ``Config.seed``); ``None`` => random per run.
+    """
     cfg = Config()
-    if seed is not None:
-        cfg.seed = seed
-        cfg.world = replace(cfg.world, seed=seed)
+    cfg.seed = seed
+    if world_seed is not None:
+        cfg.world = replace(cfg.world, seed=world_seed)
     if world_overrides:
         cfg.world = replace(cfg.world, **world_overrides)
     return cfg

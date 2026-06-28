@@ -39,17 +39,24 @@ in behind the same contract with no sim rewrite.
   consumption/reproduction **systems** enforce the authoritative world conditions.
 - **Structure-of-Arrays.** Entity state is parallel NumPy arrays in `sim/entities.py`,
   indexed by slot, with an `alive` mask + free list. Never one-object-per-entity.
-- **Determinism.** One seeded `numpy` Generator from `config.py`, threaded into every
-  system. No global `np.random`. Fixed `dt`, iterate by slot index. Same seed+config ⇒
-  identical run (checked: position/energy/genome hash is stable across runs).
+- **Two independent seeds.** `world.seed` (the **world seed**) drives world generation only
+  — terrain noise *and* hydrology (rivers use a generator derived solely from it), so the
+  same world seed always reproduces the same map. `Config.seed` (the **run seed**) drives all
+  stochastic *dynamics* via the single run `Generator` from `config.py` (`make_rng`), threaded
+  into every system; no global `np.random`. `make_config(world_seed=…, seed=…)` sets them
+  separately. Run seed `None` ⇒ a fresh random seed is drawn + recorded (each run differs);
+  an explicit value makes it reproducible. So **same world_seed + config + run seed ⇒
+  identical run**; same world_seed + different run seed ⇒ a different run on the *same* world.
+  Fixed `dt`, iterate by slot index.
 - **Fixed tick order** (`Simulation.step`): environment → grid rebuild → perception →
   brain → movement → consumption → metabolism → reproduction → vegetation → log.
 
 ## Run
 
 ```bash
-venv/Scripts/python.exe run_experiment.py --ticks 9000 --seed 12345 --out runs/run.csv --plot
-venv/Scripts/python.exe run_live.py --seed 12345 --scale 5 --spf 2     # needs a display
+venv/Scripts/python.exe run_experiment.py --ticks 9000 --world-seed 12345 --seed 7 --out runs/run.csv --plot
+venv/Scripts/python.exe run_experiment.py --ticks 9000 --world-seed 12345   # random run, fixed world
+venv/Scripts/python.exe run_live.py --world-seed 12345 --seed 7 --scale 5 --spf 2  # needs a display
 venv/Scripts/python.exe -m analysis.plots runs/run.csv --out analysis/out
 ```
 

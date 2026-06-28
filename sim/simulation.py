@@ -29,10 +29,12 @@ from sim import genome as gn
 class Simulation:
     def __init__(self, cfg: Config | None = None):
         self.cfg = cfg or Config()
+        # run RNG: drives all stochastic dynamics; resolves a random seed if none was set
         self.rng = self.cfg.make_rng()
 
-        # world is generated once from the master seed
-        self.world = World(self.cfg.world, self.rng)
+        # world is generated once from the WORLD seed only (independent of the run RNG), so
+        # the same world seed reproduces the same map regardless of the run/determinism seed
+        self.world = World(self.cfg.world)
         self.env = Environment(self.cfg.env, self.rng)
         self.entities = Entities(self.cfg)
 
