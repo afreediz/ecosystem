@@ -127,8 +127,12 @@ def default_species() -> dict:
         maturity_age=100.0, repro_cost=0.35, repro_cooldown=150.0, litter_size=2,
         # fox metabolism runs leaner than prey (lower burn/hunger) so the predator can ride
         # out prey troughs instead of starving to extinction at every dip -- the key to
-        # keeping fox numbers persistent rather than crashing (see v1.md §18).
-        hunger_rate=0.0020, thirst_rate=0.0050, base_burn=0.0012, move_cost=0.0020,
+        # keeping fox numbers persistent rather than crashing (see v1.md §18). base_burn was
+        # eased 0.0012->0.0010 when perception became egocentric GRIDS: the grid's inherent
+        # cell-quantization adds small noise to predator pursuit / prey fleeing that tipped
+        # the fragile balance to fox extinction (~t3000) on the default seed; the slightly
+        # leaner burn gives foxes the endurance to ride it out (verified seeds 12345/7/99).
+        hunger_rate=0.0020, thirst_rate=0.0050, base_burn=0.0010, move_cost=0.0020,
         population_cap=430, mutation_rate=0.18, mutation_strength=0.08,
         repro_max_hunger=0.55, repro_max_thirst=0.6, predation_gain=0.72,
         hunt_success=0.5, hunt_halfsat=90.0,

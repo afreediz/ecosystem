@@ -1,27 +1,66 @@
-"""Local, egocentric observation builder (§7.2, §12 of v1.md).
+"""Local, egocentric **grid** perception (§7.2, §12 of v1.md).
 
-Produces the (N, OBS_DIM) matrix each tick. Every external block (food/threat/mate/
-water) is gated by the agent's heritable ``sensory_range``: if nothing of a category is
-within range the block is zeroed and ``present = 0``. Relative offsets are normalized by
-sensory_range so the vector is scale-free. There is NEVER a global "nearest" fallback.
+Each tick this builds, for every alive agent, a stack of egocentric perception grids
+plus a small vector of internal/global scalars. The grids are the agent's *raw* local
+view of the world -- a square window of side ``K = 2*R + 1`` cells centred on the agent,
+where ``R`` is the largest sensory range across all species. Cells beyond the agent's
+OWN heritable ``sensory_range`` (Euclidean, in cells) or outside the world are zeroed, so
+each individual still only perceives what its eyes can reach -- the window is just a
+fixed, batchable canvas.
 
-OBS layout (OBS_DIM = 29):
+This replaces the old "nearest food / nearest threat / nearest mate / nearest water"
+feature blocks. Those scalars threw away the spatial layout of the surroundings; the
+grids keep it, which is exactly what a future convolutional brain needs (each grid is a
+CNN input channel). The current ``RuleBrain`` *decodes* these grids back into the
+targets it needs (see ``sim/brain.py``), so the rule logic is unchanged in spirit -- the
+decoding that used to live here now lives in the consumer, just as a CNN would consume
+the channels directly.
+
+GRID CHANNELS  (obs.grids: (N, N_CHANNELS, K, K), float32):
+  0 CH_TERRAIN  biome label, (biome_id + 1) / NUM_BIOMES   (0 = unseen / out of bounds)
+  1 CH_WATER    drinkable freshwater present (1/0)
+  2 CH_VEG      vegetation density [0,1]
+  3 CH_FOOD     edible *entities* present (carnivore: exposed prey; herbivore: none)
+  4 CH_THREAT   predator entities present (prey: foxes; predator: none)
+  5 CH_MATE     eligible mates present (same species, opposite sex, adult)
+
+SCALARS  (obs.scalars: (N, SCALAR_DIM), float32):
   0 hunger | 1 thirst | 2 energy | 3 health | 4 age/max_age | 5 sex
-  6-9   nearest food   : dx/r, dy/r, dist/r, present
-  10-13 nearest threat : dx/r, dy/r, dist/r, present
-  14-17 nearest mate   : dx/r, dy/r, dist/r, present
-  18-21 nearest water  : dx/r, dy/r, dist/r, present
-  22 temperature | 23 nutrients | 24 elevation | 25 moisture
-  26 on_water | 27 time_of_day | 28 season
+  6 temperature(own cell) | 7 time_of_day | 8 season
+  9 sensory_range (cells; for distance normalization + CNN) | 10 diet (1=carnivore)
 """
 from __future__ import annotations
 
 import numpy as np
+from numpy.lib.stride_tricks import sliding_window_view
 
 from config import Config, SHEEP, FOX
 from sim import genome as gn
 
-OBS_DIM = 29
+# --- grid channels ---
+CH_TERRAIN, CH_WATER, CH_VEG, CH_FOOD, CH_THREAT, CH_MATE = range(6)
+N_CHANNELS = 6
+NUM_BIOMES = 7                      # see sim/world.py biome ids (OCEAN..PLAINS)
+
+# --- scalar layout ---
+(S_HUNGER, S_THIRST, S_ENERGY, S_HEALTH, S_AGE, S_SEX,
+ S_TEMP, S_TIME, S_SEASON, S_SENSORY, S_DIET) = range(11)
+SCALAR_DIM = 11
+
+
+class Observation:
+    """The batched perception handed to ``Brain.decide``.
+
+    ``grids``   : (N, N_CHANNELS, K, K) float32 -- egocentric channels (CNN-ready).
+    ``scalars`` : (N, SCALAR_DIM)       float32 -- internal state + global env.
+    ``radius``  : int                            -- the window half-width R (K = 2R+1).
+    """
+    __slots__ = ("grids", "scalars", "radius")
+
+    def __init__(self, grids: np.ndarray, scalars: np.ndarray, radius: int):
+        self.grids = grids
+        self.scalars = scalars
+        self.radius = radius
 
 
 class Perception:
@@ -31,17 +70,56 @@ class Perception:
         self.ent = entities
         self.grid = grid
         self.env = env
-        self._species_grids = {}  # species_id -> SpatialGrid (rebuilt each tick)
+        self.veg = None                       # wired in per-tick by Simulation
+        self._species_grids = {}              # species_id -> SpatialGrid (rebuilt each tick)
+
+        # window half-width = ceil(largest sensory_range across all species). One fixed K
+        # so a single (N, C, K, K) batch covers both species; smaller-eyed individuals just
+        # see a masked sub-disc of the same canvas.
+        max_sens = max(s.gene_ranges["sensory_range"].hi for s in cfg.species.values())
+        self.R = int(np.ceil(max_sens))
+        self.K = 2 * self.R + 1
+
+        # egocentric distance-from-centre stencil (K,K)
+        offs = np.arange(-self.R, self.R + 1)
+        oy, ox = np.meshgrid(offs, offs, indexing="ij")
+        self._d_cell = np.sqrt((ox * ox + oy * oy).astype(np.float32))   # dist from centre
+
+        # circular eye masks cached by integer radius r=0..R (m[r] = cells within r). An
+        # agent uses the mask for round(its sensory_range), avoiding a per-agent recompute.
+        self._mask_cache = np.stack(
+            [(self._d_cell <= r).astype(np.float32) for r in range(self.R + 1)])  # (R+1,K,K)
+
+        # zero-padded (border R) static world fields, so each agent's KxK window is a plain
+        # slice of the padded array (a sliding-window view; no per-agent index math). Terrain
+        # and water never change; vegetation is re-padded each tick.
+        biome = world.biome.astype(np.float32)
+        terrain = (biome + 1.0) * (1.0 / NUM_BIOMES)
+        self._terr_pad = np.pad(terrain, self.R)
+        self._water_pad = np.pad(world.freshwater.astype(np.float32), self.R)
+
+        # lazily-grown output buffers (grow to the peak alive count, not max_entities)
+        self._grids = None
+        self._scalars = None
+
+    # ------------------------------------------------------------------ buffers
+    def _ensure_buffers(self, n: int) -> None:
+        if self._grids is None or self._grids.shape[0] < n:
+            cap = max(n, 1)
+            self._grids = np.zeros((cap, N_CHANNELS, self.K, self.K), dtype=np.float32)
+            self._scalars = np.zeros((cap, SCALAR_DIM), dtype=np.float32)
 
     # ------------------------------------------------------------------ public
-    def build(self, temp_field: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        """Return (obs, idx) where obs is (N,OBS_DIM) for the N alive agents in ``idx``."""
+    def build(self, temp_field: np.ndarray) -> tuple[Observation, np.ndarray]:
+        """Return (obs, idx) for the N alive agents in ``idx``."""
         ent = self.ent
         idx = ent.alive_indices()
         n = idx.shape[0]
-        obs = np.zeros((n, OBS_DIM), dtype=np.float32)
+        self._ensure_buffers(n)
+        grids = self._grids
+        scalars = self._scalars
         if n == 0:
-            return obs, idx
+            return Observation(grids[:0], scalars[:0], self.R), idx
 
         px = ent.pos_x[idx]
         py = ent.pos_y[idx]
@@ -49,188 +127,105 @@ class Perception:
         sens = gn.gene(ent.genome[idx], "sensory_range")
         max_age = gn.gene(ent.genome[idx], "max_age")
 
-        # --- internal block 0-5 ---
-        obs[:, 0] = ent.hunger[idx]
-        obs[:, 1] = ent.thirst[idx]
-        obs[:, 2] = ent.energy[idx]
-        obs[:, 3] = ent.health[idx]
-        obs[:, 4] = np.clip(ent.age[idx] / np.maximum(max_age, 1e-6), 0.0, 1.0)
-        obs[:, 5] = ent.sex[idx].astype(np.float32)
+        cx, cy = self.world.world_to_cell(px, py)        # clamped cell indices (n,)
+        cx = cx.astype(np.int32)
+        cy = cy.astype(np.int32)
 
-        # --- external blocks (per category) ---
-        self._fill_water(obs, px, py, sens)
-        self._fill_food(obs, idx, px, py, spec_arr, sens)
-        self._fill_threat_and_mate(obs, idx, px, py, spec_arr, sens)
+        # entity channels are sparse -> zero this tick's slice before scattering into them.
+        # field channels (terrain/water/veg) are fully overwritten below, no zeroing needed.
+        grids[:n, CH_FOOD:CH_MATE + 1] = 0.0
 
-        # --- local env block 22-28 ---
-        cx, cy = self.world.world_to_cell(px, py)
-        obs[:, 22] = temp_field[cy, cx]
-        obs[:, 23] = self.world.nutrients[cy, cx]
-        obs[:, 24] = self.world.elevation[cy, cx]
-        obs[:, 25] = self.world.moisture[cy, cx]
-        obs[:, 26] = self.world.freshwater[cy, cx].astype(np.float32)
-        obs[:, 27] = self.env.time_of_day
-        obs[:, 28] = self.env.season
-        return obs, idx
+        self._fill_field_channels(grids, n, cx, cy, sens)
+        self._fill_entity_channels(grids, idx, px, py, cx, cy, spec_arr, sens)
 
-    # ------------------------------------------------------------------ water
-    def _fill_water(self, obs, px, py, sens):
-        """Nearest freshwater from the precomputed world distance/direction fields."""
-        w = self.world
-        cx, cy = w.world_to_cell(px, py)
-        dist = w.fw_dist[cy, cx]                # world units (cells)
-        tx = w.fw_nearest_x[cy, cx].astype(np.float32)
-        ty = w.fw_nearest_y[cy, cx].astype(np.float32)
-        in_range = (dist <= sens) & np.isfinite(dist)
-        dx = (tx - px)
-        dy = (ty - py)
-        r = np.maximum(sens, 1e-6)
-        obs[:, 18] = np.where(in_range, np.clip(dx / r, -1, 1), 0.0)
-        obs[:, 19] = np.where(in_range, np.clip(dy / r, -1, 1), 0.0)
-        obs[:, 20] = np.where(in_range, np.clip(dist / r, 0, 1), 0.0)
-        obs[:, 21] = in_range.astype(np.float32)
+        # --- scalars ---
+        s = scalars
+        s[:n, S_HUNGER] = ent.hunger[idx]
+        s[:n, S_THIRST] = ent.thirst[idx]
+        s[:n, S_ENERGY] = ent.energy[idx]
+        s[:n, S_HEALTH] = ent.health[idx]
+        s[:n, S_AGE] = np.clip(ent.age[idx] / np.maximum(max_age, 1e-6), 0.0, 1.0)
+        s[:n, S_SEX] = ent.sex[idx].astype(np.float32)
+        s[:n, S_TEMP] = temp_field[cy, cx]
+        s[:n, S_TIME] = self.env.time_of_day
+        s[:n, S_SEASON] = self.env.season
+        s[:n, S_SENSORY] = sens
+        s[:n, S_DIET] = (spec_arr == FOX).astype(np.float32)   # foxes are carnivores
 
-    # ------------------------------------------------------------------ food
-    def _fill_food(self, obs, idx, px, py, spec_arr, sens):
-        """Sheep food = best vegetation cell in range; fox food = nearest sheep in range."""
-        w = self.world
-        veg = self.veg
-        thr = self.cfg.sim.food_eat_threshold
+        return Observation(grids[:n], scalars[:n], self.R), idx
+
+    # ------------------------------------------------------------------ field channels
+    def _fill_field_channels(self, grids, n, cx, cy, sens) -> None:
+        """Terrain / water / vegetation sampled over each agent's egocentric window.
+
+        Each agent's KxK window is the slice ``pad[cy:cy+K, cx:cx+K]`` of the R-padded world
+        field; ``sliding_window_view`` exposes all those windows as one zero-copy array that
+        we gather with the agents' cell indices. Off-world cells fall in the zero pad border;
+        cells beyond the agent's own sensory range are removed by the cached circular mask.
+        """
+        K = self.K
+        veg_pad = np.pad(self.veg, self.R)                       # veg changes every tick
+        masks = self._mask_cache[np.clip(np.rint(sens).astype(np.intp), 0, self.R)]  # (n,K,K)
+
+        terr_win = sliding_window_view(self._terr_pad, (K, K))[cy, cx]   # (n,K,K)
+        water_win = sliding_window_view(self._water_pad, (K, K))[cy, cx]
+        veg_win = sliding_window_view(veg_pad, (K, K))[cy, cx]
+
+        grids[:n, CH_TERRAIN] = terr_win * masks
+        grids[:n, CH_WATER] = water_win * masks
+        grids[:n, CH_VEG] = veg_win * masks
+
+    # ------------------------------------------------------------------ entity channels
+    def _fill_entity_channels(self, grids, idx, px, py, cx, cy, spec_arr, sens) -> None:
+        ent = self.ent
+        cfg = self.cfg
         is_sheep = spec_arr == SHEEP
         is_fox = spec_arr == FOX
 
-        # --- sheep: faithful local forage perception -- each sheep sees the
-        # highest-vegetation cell within ITS OWN sensory_range. Batched across all sheep
-        # with a per-agent-masked offset stencil (vectorized, but semantics are exactly
-        # "best grass cell I can actually see"). ---
-        sheep_rows = np.nonzero(is_sheep)[0]
-        if sheep_rows.shape[0]:
-            self._sheep_food_vectorized(obs, sheep_rows, px, py, sens, veg, thr)
-
-        # --- fox: nearest EXPOSED sheep via species grid (sheep in cover are hidden) ---
-        if is_fox.any():
-            sheep_grid = self._species_grids.get(SHEEP)
-            for k in np.nonzero(is_fox)[0]:
-                self._nearest_from_grid(obs, k, px[k], py[k], sens[k], sheep_grid,
-                                        base=6, exclude_slot=None, exclude_cover=True)
-
-    def _sheep_food_vectorized(self, obs, rows, px, py, sens, veg, thr):
-        w = self.world
-        R = int(np.ceil(self.cfg.species[SHEEP].gene_ranges["sensory_range"].hi))
-        K = 2 * R + 1
-        offs = np.arange(-R, R + 1)
-        oy, ox = np.meshgrid(offs, offs, indexing="ij")        # (K,K)
-        d2_stencil = (ox.astype(np.float32) ** 2 + oy.astype(np.float32) ** 2)  # (K,K)
-
-        sx = px[rows]
-        sy = py[rows]
-        scx = np.clip(sx.astype(np.intp), 0, w.w - 1)
-        scy = np.clip(sy.astype(np.intp), 0, w.h - 1)
-        srange = sens[rows]
-
-        # target cell indices for every (agent, stencil) pair
-        tx = scx[:, None, None] + ox[None]                      # (S,K,K)
-        ty = scy[:, None, None] + oy[None]
-        in_bounds = (tx >= 0) & (tx < w.w) & (ty >= 0) & (ty < w.h)
-        txc = np.clip(tx, 0, w.w - 1)
-        tyc = np.clip(ty, 0, w.h - 1)
-        veg_vals = veg[tyc, txc]                                # (S,K,K)
-
-        within = d2_stencil[None] <= (srange[:, None, None] ** 2)
-        valid = within & in_bounds & (veg_vals > thr)
-        score = np.where(valid, veg_vals - 0.02 * np.sqrt(d2_stencil)[None], -np.inf)
-
-        flat = score.reshape(score.shape[0], -1)
-        best = np.argmax(flat, axis=1)
-        has_food = np.isfinite(flat[np.arange(flat.shape[0]), best])
-        by, bx = np.unravel_index(best, (K, K))
-
-        # target cell center relative to the sheep's continuous position
-        target_x = scx + ox.reshape(-1)[best] + 0.5
-        target_y = scy + oy.reshape(-1)[best] + 0.5
-        tdx = target_x - sx
-        tdy = target_y - sy
-        dist = np.sqrt(tdx * tdx + tdy * tdy)
-        rr = np.maximum(srange, 1e-6)
-
-        present = has_food.astype(np.float32)
-        obs[rows, 6] = np.where(has_food, np.clip(tdx / rr, -1, 1), 0.0)
-        obs[rows, 7] = np.where(has_food, np.clip(tdy / rr, -1, 1), 0.0)
-        obs[rows, 8] = np.where(has_food, np.clip(dist / rr, 0, 1), 0.0)
-        obs[rows, 9] = present
-
-    # ------------------------------------------------------------------ threat / mate
-    def _fill_threat_and_mate(self, obs, idx, px, py, spec_arr, sens):
-        ent = self.ent
-        is_sheep = spec_arr == SHEEP
+        # THREAT: prey see foxes (predators see no threats). Skip when no foxes are alive.
         fox_grid = self._species_grids.get(FOX)
-        age = ent.age[idx]
-
-        # threat: sheep see nearest fox (block 10-13). foxes: none. Skip entirely when
-        # there are no foxes alive (common; avoids N pointless grid queries).
-        n_fox = int(self.ent.count_species(FOX))
-        if n_fox > 0 and is_sheep.any() and fox_grid is not None:
+        if fox_grid is not None and int(ent.count_species(FOX)) > 0:
             for k in np.nonzero(is_sheep)[0]:
-                self._nearest_from_grid(obs, k, px[k], py[k], sens[k], fox_grid,
-                                        base=10, exclude_slot=None)
+                cand, cpx, cpy = fox_grid.query_radius(float(px[k]), float(py[k]), float(sens[k]))
+                if cand.shape[0]:
+                    self._scatter(grids[k, CH_THREAT], int(cx[k]), int(cy[k]), cpx, cpy)
 
-        # mate: nearest in-range conspecific, opposite sex, adult (block 14-17).
-        # Only ADULTS can mate, so juveniles skip the (expensive) query -- a big win in a
-        # growing population dominated by young animals.
+        # FOOD (entities): foxes see EXPOSED prey -- sheep hidden in cover are invisible to
+        # predators (the prey refuge, v1.md §18). Herbivores leave this channel empty; their
+        # food is the vegetation channel.
+        sheep_grid = self._species_grids.get(SHEEP)
+        if sheep_grid is not None and is_fox.any():
+            for k in np.nonzero(is_fox)[0]:
+                cand, cpx, cpy = sheep_grid.query_radius(float(px[k]), float(py[k]), float(sens[k]))
+                if cand.shape[0] == 0:
+                    continue
+                keep = ~self.world.in_cover(cpx, cpy)
+                if keep.any():
+                    self._scatter(grids[k, CH_FOOD], int(cx[k]), int(cy[k]), cpx[keep], cpy[keep])
+
+        # MATE: adults see in-range conspecifics of the opposite sex who are also adult.
+        # Juveniles can't mate, so they skip the (expensive) query entirely.
         for k in range(idx.shape[0]):
             sp = int(spec_arr[k])
-            if age[k] < self.cfg.species[sp].maturity_age:
+            slot = idx[k]
+            if ent.age[slot] < cfg.species[sp].maturity_age:
                 continue
             grid = self._species_grids.get(sp)
             if grid is None:
                 continue
-            self._nearest_mate(obs, k, idx[k], px[k], py[k], sens[k], grid, sp)
-
-    # ------------------------------------------------------------------ helpers
-    def _nearest_from_grid(self, obs, k, x, y, r, grid, base, exclude_slot,
-                           exclude_cover=False):
-        if grid is None:
-            return
-        cand, cpx, cpy = grid.query_radius(float(x), float(y), float(r))
-        if cand.shape[0] == 0:
-            return
-        if exclude_slot is not None:
-            keep = cand != exclude_slot
-            cand, cpx, cpy = cand[keep], cpx[keep], cpy[keep]
+            cand, cpx, cpy = grid.query_radius(float(px[k]), float(py[k]), float(sens[k]))
             if cand.shape[0] == 0:
-                return
-        if exclude_cover:                       # predators can't see prey hidden in cover
-            keep = ~self.world.in_cover(cpx, cpy)
-            cand, cpx, cpy = cand[keep], cpx[keep], cpy[keep]
-            if cand.shape[0] == 0:
-                return
-        d2 = (cpx - x) ** 2 + (cpy - y) ** 2
-        j = int(np.argmin(d2))
-        dist = float(np.sqrt(d2[j]))
-        rr = max(float(r), 1e-6)
-        obs[k, base + 0] = np.clip((cpx[j] - x) / rr, -1, 1)
-        obs[k, base + 1] = np.clip((cpy[j] - y) / rr, -1, 1)
-        obs[k, base + 2] = np.clip(dist / rr, 0, 1)
-        obs[k, base + 3] = 1.0
+                continue
+            mat = cfg.species[sp].maturity_age
+            valid = (ent.sex[cand] != ent.sex[slot]) & (ent.age[cand] >= mat) & (cand != slot)
+            if valid.any():
+                self._scatter(grids[k, CH_MATE], int(cx[k]), int(cy[k]), cpx[valid], cpy[valid])
 
-    def _nearest_mate(self, obs, k, slot, x, y, r, grid, species_id):
-        ent = self.ent
-        cand, cpx, cpy = grid.query_radius(float(x), float(y), float(r))
-        if cand.shape[0] == 0:
-            return
-        my_sex = ent.sex[slot]
-        spec = self.cfg.species[species_id]
-        opp = ent.sex[cand] != my_sex
-        adult = ent.age[cand] >= spec.maturity_age
-        valid = opp & adult & (cand != slot)
-        if not valid.any():
-            return
-        cand, cpx, cpy = cand[valid], cpx[valid], cpy[valid]
-        d2 = (cpx - x) ** 2 + (cpy - y) ** 2
-        j = int(np.argmin(d2))
-        dist = float(np.sqrt(d2[j]))
-        rr = max(float(r), 1e-6)
-        obs[k, 14] = np.clip((cpx[j] - x) / rr, -1, 1)
-        obs[k, 15] = np.clip((cpy[j] - y) / rr, -1, 1)
-        obs[k, 16] = np.clip(dist / rr, 0, 1)
-        obs[k, 17] = 1.0
+    def _scatter(self, chan, ocx: int, ocy: int, cpx, cpy) -> None:
+        """Mark candidate world positions as present cells in agent ``k``'s (K,K) window."""
+        R = self.R
+        ox = cpx.astype(np.int32) - ocx
+        oy = cpy.astype(np.int32) - ocy
+        m = (ox >= -R) & (ox <= R) & (oy >= -R) & (oy <= R)
+        if m.any():
+            chan[oy[m] + R, ox[m] + R] = 1.0

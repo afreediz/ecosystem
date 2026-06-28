@@ -1,21 +1,31 @@
 """Brain interface + hardcoded RuleBrain (§7.1, §13 of v1.md).
 
-The contract is the spine of the whole project: ``decide(obs) -> act`` where obs is
-(N, OBS_DIM) and act is (N, ACT_DIM). The brain sees ONLY the observation matrix --
-exactly what a future PyTorch brain will get. Swapping RuleBrain for a TorchBrain
-changes nothing else.
+The contract is the spine of the whole project: ``decide(obs) -> act`` where ``obs`` is an
+``Observation`` (egocentric perception grids + a scalar vector, see ``sim/perception.py``)
+and ``act`` is the (N, ACT_DIM) action matrix. The brain sees ONLY the observation --
+exactly what a future PyTorch/CNN brain will get. Swapping RuleBrain for a TorchBrain
+changes nothing else; the CNN would consume ``obs.grids`` (N, C, K, K) as image channels.
 
-Adjacency and reproduction *eligibility* are only proxied here from the observation;
-the consumption / reproduction systems enforce the authoritative conditions, so the
-brain never needs hidden state. Exploration momentum lives in the movement system
-(turn-rate-limited steering), so the stateless brain can emit a fresh random heading
-each tick and still produce a smooth directed wander.
+Because a *rule* brain can't run a convolution, it first **decodes** the relevant grid
+channels back into the simple targets it reasons over -- "nearest threat", "best grass
+cell", "nearest mate/water/prey". That decoding (``nearest_in_channel`` / ``best_in_channel``)
+is the only thing that moved out of perception; the priority arbitration below is the same
+as before. A neural brain skips the decoding and learns straight off the channels.
+
+Adjacency and reproduction *eligibility* are only proxied here from the observation; the
+consumption / reproduction systems enforce the authoritative conditions, so the brain
+never needs hidden state. Exploration momentum lives in the movement system, so the
+stateless brain can emit a fresh random heading each tick and still wander smoothly.
 """
 from __future__ import annotations
 
 import numpy as np
 
-OBS_DIM = 29
+from sim.perception import (
+    CH_WATER, CH_VEG, CH_FOOD, CH_THREAT, CH_MATE,
+    S_HUNGER, S_THIRST, S_ENERGY, S_SENSORY, S_DIET,
+)
+
 ACT_DIM = 5
 
 # action indices
@@ -30,10 +40,76 @@ _NEED_URGENCY = 0.4
 # tolerate distant predators and keep foraging/breeding
 _FLEE_TRIGGER = 0.45
 
+# default vegetation threshold a grass cell must clear to be worth grazing (config override
+# is passed into RuleBrain; mirrors cfg.sim.food_eat_threshold)
+_DEFAULT_FOOD_THR = 0.15
+
+
+# --------------------------------------------------------------------- grid decoding
+_STENCIL_CACHE: dict[int, tuple] = {}
+
+
+def _stencil(K: int):
+    """Cached (ox, oy, dcell) flat offset/distance stencils for a KxK egocentric window."""
+    s = _STENCIL_CACHE.get(K)
+    if s is None:
+        R = (K - 1) // 2
+        offs = np.arange(-R, R + 1)
+        oy, ox = np.meshgrid(offs, offs, indexing="ij")
+        ox = ox.ravel().astype(np.float32)
+        oy = oy.ravel().astype(np.float32)
+        dcell = np.sqrt(ox * ox + oy * oy)
+        s = (ox, oy, dcell)
+        _STENCIL_CACHE[K] = s
+    return s
+
+
+def nearest_in_channel(chan: np.ndarray):
+    """Reduce a (N,K,K) channel to its NEAREST present cell, relative to the window centre.
+
+    Returns ``(present, dx_cells, dy_cells, dist_cells)`` -- arrays of shape (N,). ``present``
+    is 1.0 where any cell of the channel is non-zero, else 0.0 (with the offsets/dist zeroed).
+    """
+    n = chan.shape[0]
+    K = chan.shape[-1]
+    ox, oy, dcell = _stencil(K)
+    flat = chan.reshape(n, -1)
+    d = np.where(flat > 0.0, dcell[None], np.inf)
+    j = np.argmin(d, axis=1)
+    ar = np.arange(n)
+    dist = d[ar, j]
+    present = np.isfinite(dist)
+    return (present.astype(np.float32),
+            np.where(present, ox[j], 0.0),
+            np.where(present, oy[j], 0.0),
+            np.where(present, dist, 0.0))
+
+
+def best_in_channel(chan: np.ndarray, thr: float):
+    """Reduce a scalar-valued (N,K,K) channel (e.g. vegetation) to its BEST cell.
+
+    Score = value - 0.02 * distance, over cells whose value exceeds ``thr`` -- i.e. the
+    richest patch in sight, with a mild pull toward closer cells (faithful to the old
+    "best grass cell within sensory_range" forage rule, v1.md §18). Returns
+    ``(present, dx_cells, dy_cells, dist_cells)``.
+    """
+    n = chan.shape[0]
+    K = chan.shape[-1]
+    ox, oy, dcell = _stencil(K)
+    flat = chan.reshape(n, -1)
+    score = np.where(flat > thr, flat - 0.02 * dcell[None], -np.inf)
+    j = np.argmax(score, axis=1)
+    ar = np.arange(n)
+    present = np.isfinite(score[ar, j])
+    return (present.astype(np.float32),
+            np.where(present, ox[j], 0.0),
+            np.where(present, oy[j], 0.0),
+            np.where(present, dcell[j], 0.0))
+
 
 class Brain:
-    def decide(self, obs: np.ndarray) -> np.ndarray:
-        """obs: (N, OBS_DIM) float32 -> actions: (N, ACT_DIM) float32."""
+    def decide(self, obs) -> np.ndarray:
+        """obs: Observation -> actions: (N, ACT_DIM) float32."""
         raise NotImplementedError
 
 
@@ -46,22 +122,39 @@ def _norm(dx, dy):
 
 
 class RuleBrain(Brain):
-    """Vectorized priority arbitration (throwaway logic; exercises the contract)."""
+    """Vectorized priority arbitration over decoded perception grids (throwaway logic)."""
 
-    def __init__(self, rng: np.random.Generator):
+    def __init__(self, rng: np.random.Generator, food_threshold: float = _DEFAULT_FOOD_THR):
         self.rng = rng
+        self.food_thr = float(food_threshold)
 
-    def decide(self, obs: np.ndarray) -> np.ndarray:
-        n = obs.shape[0]
+    def decide(self, obs) -> np.ndarray:
+        grids = obs.grids                       # (N, C, K, K)
+        sc = obs.scalars                        # (N, SCALAR_DIM)
+        n = grids.shape[0]
         act = np.zeros((n, ACT_DIM), dtype=np.float32)
         if n == 0:
             return act
 
-        hunger, thirst, energy = obs[:, 0], obs[:, 1], obs[:, 2]
-        food_dx, food_dy, food_d, food_p = obs[:, 6], obs[:, 7], obs[:, 8], obs[:, 9]
-        thr_dx, thr_dy, thr_d, thr_p = obs[:, 10], obs[:, 11], obs[:, 12], obs[:, 13]
-        mate_dx, mate_dy, mate_d, mate_p = obs[:, 14], obs[:, 15], obs[:, 16], obs[:, 17]
-        wat_dx, wat_dy, wat_d, wat_p = obs[:, 18], obs[:, 19], obs[:, 20], obs[:, 21]
+        hunger, thirst, energy = sc[:, S_HUNGER], sc[:, S_THIRST], sc[:, S_ENERGY]
+        sens = np.maximum(sc[:, S_SENSORY], 1e-6)
+        is_pred = sc[:, S_DIET] > 0.5
+
+        # --- decode grids into the targets the rules reason over ---
+        # food: herbivores forage the best grass cell; carnivores chase the nearest prey.
+        veg_p, veg_dx, veg_dy, veg_dc = best_in_channel(grids[:, CH_VEG], self.food_thr)
+        prey_p, prey_dx, prey_dy, prey_dc = nearest_in_channel(grids[:, CH_FOOD])
+        food_p = np.where(is_pred, prey_p, veg_p)
+        food_dx = np.where(is_pred, prey_dx, veg_dx)
+        food_dy = np.where(is_pred, prey_dy, veg_dy)
+        food_d = np.clip(np.where(is_pred, prey_dc, veg_dc) / sens, 0.0, 1.0)
+
+        thr_p, thr_dx, thr_dy, thr_dc = nearest_in_channel(grids[:, CH_THREAT])
+        thr_d = np.clip(thr_dc / sens, 0.0, 1.0)
+        mate_p, mate_dx, mate_dy, mate_dc = nearest_in_channel(grids[:, CH_MATE])
+        mate_d = np.clip(mate_dc / sens, 0.0, 1.0)
+        wat_p, wat_dx, wat_dy, wat_dc = nearest_in_channel(grids[:, CH_WATER])
+        wat_d = np.clip(wat_dc / sens, 0.0, 1.0)
 
         # --- priority 4: explore (default) -- fresh random heading; movement smooths it
         ang = self.rng.uniform(0.0, 2 * np.pi, size=n).astype(np.float32)

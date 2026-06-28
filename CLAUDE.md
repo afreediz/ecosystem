@@ -19,11 +19,18 @@ in behind the same contract with no sim rewrite.
 - **`sim/` never imports `render/`.** The sim core is pure numbers. Verify with:
   `grep -rn --include=*.py "^\s*\(import render\|from render\)" sim/` → must be empty.
 - **Brain↔world contract is the spine.** All decisions go through
-  `Brain.decide(obs) -> act` over batched `(N, OBS_DIM=29)` / `(N, ACT_DIM=5)` matrices
+  `Brain.decide(obs) -> act` where `obs` is an `Observation` (egocentric perception
+  **grids** + a scalar vector) and `act` is the batched `(N, ACT_DIM=5)` action matrix
   (`sim/perception.py` defines obs, `sim/brain.py` defines act). The brain sees ONLY the
-  29-dim observation — no hidden state. Adjacency / reproduction eligibility are proxied
-  from obs in the brain; the consumption/reproduction **systems** enforce the authoritative
-  world conditions.
+  observation — no hidden state. `obs.grids` is `(N, N_CHANNELS=6, K, K)` egocentric
+  channels (terrain, water, vegetation, food-entities, threats, mates) centred on each
+  agent, with `K = 2*R+1` and `R = ceil(max sensory_range)`; cells beyond an agent's own
+  `sensory_range` or off-world are zeroed. `obs.scalars` is `(N, SCALAR_DIM=11)` internal
+  state + global env. The grids are CNN-channel-ready (the whole point of the grid design);
+  the `RuleBrain` first *decodes* the channels it needs back into nearest/best targets
+  (`nearest_in_channel` / `best_in_channel` in `sim/brain.py`) since a rule brain can't
+  convolve. Adjacency / reproduction eligibility are proxied from obs in the brain; the
+  consumption/reproduction **systems** enforce the authoritative world conditions.
 - **Structure-of-Arrays.** Entity state is parallel NumPy arrays in `sim/entities.py`,
   indexed by slot, with an `alive` mask + free list. Never one-object-per-entity.
 - **Determinism.** One seeded `numpy` Generator from `config.py`, threaded into every
@@ -76,10 +83,14 @@ Removing any one tends to collapse the predator. Keep them in mind before retuni
    *eased* from the original (cooldown 180, threshold 0.68–0.85, cap 350→430) so foxes can
    mount a numerical response and recover from troughs — but `repro_cost` is kept as the brake.
 7. **Lean predator metabolism** — fox `base_burn`/`move_cost`/`hunger_rate` run ~⅓ below the
-   prey's (0.0012/0.0020/0.0020) so a fox can ride out lean periods between kills instead of
+   prey's (0.0010/0.0020/0.0020) so a fox can ride out lean periods between kills instead of
    starving the moment prey dips. **This is the single most important — and most sensitive —
    persistence lever:** at `base_burn` 0.0015 the predator still goes extinct on the default
-   seed; 0.0012 yields robust coexistence. Retune it gently and always re-run before trusting.
+   seed. `base_burn` was eased 0.0012→**0.0010** when perception became egocentric **grids**:
+   the grid's inherent cell-quantization adds small noise to predator pursuit / prey fleeing
+   that tipped the (chaotic, fragile) balance to fox extinction (~t3000) on the default seed —
+   the leaner burn restores the endurance to ride it out (re-verified seeds 12345/7/99).
+   Retune it gently and always re-run before trusting.
 
 With these, foxes **persist** (they no longer go extinct at the first deep trough) and the
 sheep stay bounded well below their cap, in sustained predator–prey oscillations. Verified to
