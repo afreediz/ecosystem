@@ -125,5 +125,6 @@ def apply(cfg, world, ent, idx, act, species_grids, rng):
         for pset in (pay_a, pay_b):
             ent.energy[pset] = np.maximum(0.0, ent.energy[pset] - spec.repro_cost)
             ent.repro_cooldown[pset] = spec.repro_cooldown
+            ent.mating_glow[pset] = cfg.sim.mating_glow_duration  # cosmetic: flash rose
 
     return total_births
