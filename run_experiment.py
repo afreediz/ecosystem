@@ -16,8 +16,9 @@ from analysis.logger import Logger
 
 
 def run_experiment(ticks: int, seed: int, out: str, log_every: int | None = None,
-                   progress_every: int = 2000, quiet: bool = False):
-    cfg = make_config(seed=seed)
+                   progress_every: int = 2000, quiet: bool = False,
+                   map_scale: float = 1.0):
+    cfg = make_config(seed=seed, map_scale=map_scale)
     if log_every is not None:
         cfg.sim.log_every = log_every
     sim = Simulation(cfg)
@@ -56,10 +57,14 @@ def main():
     ap.add_argument("--seed", type=int, default=12345)
     ap.add_argument("--out", type=str, default="runs/run.csv")
     ap.add_argument("--log-every", type=int, default=None)
+    ap.add_argument("--map-scale", type=float, default=1.0,
+                    help="map size multiplier (1.0 = default 208x117; higher = wider/"
+                         "taller map, populations scale with area to stay viable)")
     ap.add_argument("--plot", action="store_true", help="render a PNG report after the run")
     args = ap.parse_args()
 
-    sim, out = run_experiment(args.ticks, args.seed, args.out, log_every=args.log_every)
+    sim, out = run_experiment(args.ticks, args.seed, args.out, log_every=args.log_every,
+                              map_scale=args.map_scale)
 
     if args.plot:
         from analysis.plots import make_report
