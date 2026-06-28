@@ -1,7 +1,7 @@
 """Entry point: watch the simulation live in an Arcade window (observer only).
 
 Shares the exact same sim/ core as run_experiment.py. Usage:
-    python run_live.py [--seed N] [--scale N] [--spf N]
+    python run_live.py [--seed N] [--scale N] [--spf N] [--map-scale F]
 """
 from __future__ import annotations
 
@@ -13,13 +13,16 @@ from config import make_config
 def main():
     ap = argparse.ArgumentParser(description="Watch the ecosystem simulation live.")
     ap.add_argument("--seed", type=int, default=None, help="master seed override")
-    ap.add_argument("--scale", type=int, default=4, help="pixels per world cell")
+    ap.add_argument("--scale", type=int, default=2, help="pixels per world cell")
     ap.add_argument("--spf", type=float, default=1.0,
                     help="sim steps per rendered frame (fractional ok, e.g. 0.25 = "
                          "1 step every 4 frames, for slow observation)")
+    ap.add_argument("--map-scale", type=float, default=1.0,
+                    help="map size multiplier (1.0 = default 208x117; higher = wider/"
+                         "taller map, populations scale with area to stay viable)")
     args = ap.parse_args()
 
-    cfg = make_config(seed=args.seed) if args.seed is not None else None
+    cfg = make_config(seed=args.seed, map_scale=args.map_scale)
     # import arcade lazily so headless environments without a display can still import
     # the sim package without pulling in OpenGL.
     from render.viewer import run
