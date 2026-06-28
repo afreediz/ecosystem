@@ -23,11 +23,26 @@ from config import Config, SHEEP, FOX
 from sim.entities import MALE
 from sim.simulation import Simulation
 from sim.world import BIOME_COLORS
+from sim.perception import (
+    CH_TERRAIN, CH_WATER, CH_VEG, CH_FOOD, CH_THREAT, CH_MATE, N_CHANNELS)
 
 # Both species flash this rose hue for a few ticks right after they breed.
 MATING_COLOR = (255, 80, 150)
 # Small black marker drawn at the top-right of every male.
 MALE_MARK_COLOR = (0, 0, 0)
+# Ring drawn around the currently-selected (inspected) entity.
+SELECT_COLOR = (255, 230, 60)
+
+# Perception-grid inspector: one (label, channel, base colour) per channel. The base
+# colour is the hue a fully-present cell glows; intermediate values fade toward black.
+GRID_CHANNELS = [
+    ("terrain", CH_TERRAIN, (150, 150, 150)),
+    ("water",   CH_WATER,   (60, 130, 220)),
+    ("veg",     CH_VEG,     (90, 190, 80)),
+    ("food",    CH_FOOD,    (250, 200, 50)),
+    ("threat",  CH_THREAT,  (230, 60, 40)),
+    ("mate",    CH_MATE,    (255, 90, 160)),
+]
 
 
 class EcosystemViewer(arcade.Window):
@@ -58,6 +73,12 @@ class EcosystemViewer(arcade.Window):
         self._mouse_x = win_w / 2     # latest cursor pos (screen px) for spawn-at-mouse
         self._mouse_y = win_h / 2
         self._pan_anchor = None       # world point grabbed at right-mouse-press (for panning)
+
+        # entity inspector: slot of the clicked agent (None = nothing selected) + the lazily
+        # built per-channel textures used to draw its egocentric perception grids.
+        self._selected_slot = None
+        self._grid_textures = None     # list[(arcade.Texture, np.ndarray rgba, PIL.Image)]
+        self._grid_k = None            # K (window side) the textures were sized for
 
         # World camera (zoom/pan) for terrain + entities; GUI camera (fixed) for the HUD.
         self.world_camera = arcade.camera.Camera2D()
@@ -162,12 +183,28 @@ class EcosystemViewer(arcade.Window):
         self._draw_species(SHEEP, (245, 245, 245), max(2.0, self.scale * 0.8))
         self._draw_species(FOX, (220, 70, 40), max(3.0, self.scale * 1.1))
 
+        # ring the inspected entity so it's easy to keep track of as it moves
+        self._draw_selection_ring()
+
         # nightfall: dim the whole scene as daylight fades (cosmetic, driven by the same
         # diurnal clock the animals sleep by). Drawn over terrain + entities, under the HUD.
         self._draw_night_overlay()
 
         self.gui_camera.use()
         self._draw_hud()
+        self._draw_perception_inspector()
+
+    def _draw_selection_ring(self) -> None:
+        slot = self._selected_slot
+        if slot is None:
+            return
+        ent = self.sim.entities
+        if not bool(ent.alive[slot]):
+            self._selected_slot = None       # the inspected animal died; drop the selection
+            return
+        sx, sy = self._world_to_screen(ent.pos_x[slot:slot + 1], ent.pos_y[slot:slot + 1])
+        r = max(4.0, self.scale * 1.6)
+        arcade.draw_circle_outline(float(sx[0]), float(sy[0]), r, SELECT_COLOR, 1.5)
 
     def _draw_night_overlay(self) -> None:
         from sim.environment import light_level
@@ -226,6 +263,7 @@ class EcosystemViewer(arcade.Window):
             f"births {s.get('births', 0)}  deaths {s.get('deaths', 0)} "
             f"(pred {s.get('death_predation', 0)})   asleep {s.get('n_asleep', 0)}",
             "male: black dot   mating: rose tint   asleep: dimmed",
+            "left-click an animal to inspect its perception grids",
         ]
         # dark translucent backing so white text stays readable over light terrain
         # (snow / beach / grazed grass) -- without it the HUD "disappears" on bright cells.
@@ -239,6 +277,92 @@ class EcosystemViewer(arcade.Window):
             arcade.draw_text(ln, 8, y, (255, 255, 255), 12,
                              font_name=("consolas", "monospace"))
             y -= 16
+
+    # ------------------------------------------------------------------ perception inspector
+    def _selected_obs_grids(self):
+        """The (N_CHANNELS, K, K) perception stack of the selected agent, or None.
+
+        Looks the entity's slot up in the sim's latest observation. Returns None when
+        nothing is selected, the agent died, or it isn't in this tick's obs yet.
+        """
+        slot = self._selected_slot
+        if slot is None:
+            return None
+        if not bool(self.sim.entities.alive[slot]):
+            self._selected_slot = None
+            return None
+        obs = self.sim.last_obs
+        idx = self.sim.last_obs_idx
+        if obs is None or idx is None:
+            return None
+        rows = np.nonzero(idx == slot)[0]
+        if rows.shape[0] == 0 or int(rows[0]) >= obs.grids.shape[0]:
+            return None
+        return obs.grids[int(rows[0])]
+
+    def _ensure_grid_textures(self, k: int) -> None:
+        """Lazily (re)build the per-channel RGBA textures for a window side ``k``."""
+        if self._grid_textures is not None and self._grid_k == k:
+            return
+        self._grid_textures = []
+        for _ in range(N_CHANNELS):
+            rgba = np.zeros((k, k, 4), dtype=np.uint8)
+            img = Image.fromarray(rgba, mode="RGBA")
+            tex = arcade.Texture(img)
+            self.ctx.default_atlas.add(tex)
+            self._grid_textures.append([tex, rgba, img])
+        self._grid_k = k
+
+    def _draw_perception_inspector(self) -> None:
+        grids = self._selected_obs_grids()
+        if grids is None:
+            return
+        k = grids.shape[-1]
+        self._ensure_grid_textures(k)
+
+        ent = self.sim.entities
+        slot = self._selected_slot
+        species = "fox" if ent.species[slot] == FOX else "sheep"
+
+        # layout: two columns of channel tiles tucked under the top-right corner
+        chan, gap, label_h, margin = 92, 6, 14, 8
+        cols, rows = 2, (N_CHANNELS + 1) // 2
+        header_h = 18
+        panel_w = cols * chan + (cols + 1) * gap
+        panel_h = header_h + rows * (chan + label_h) + (rows + 1) * gap
+        x0 = self.width - panel_w - margin
+        y_top = self.height - margin
+
+        arcade.draw_rect_filled(
+            arcade.LBWH(x0, y_top - panel_h, panel_w, panel_h), (0, 0, 0, 170))
+        arcade.draw_text(f"perception  {species} #{slot}", x0 + gap, y_top - header_h + 2,
+                         SELECT_COLOR, 12, font_name=("consolas", "monospace"))
+
+        grid_top = y_top - header_h
+        for i, (label, ch, color) in enumerate(GRID_CHANNELS):
+            col, row = i % cols, i // cols
+            cell_x = x0 + gap + col * (chan + gap)
+            cell_top = grid_top - gap - row * (chan + label_h + gap)
+            self._update_channel_texture(i, grids[ch], color)
+            tex = self._grid_textures[i][0]
+            arcade.draw_text(label, cell_x, cell_top - label_h + 2, color, 10,
+                             font_name=("consolas", "monospace"))
+            arcade.draw_texture_rect(
+                tex, arcade.LBWH(cell_x, cell_top - label_h - chan, chan, chan))
+
+    def _update_channel_texture(self, i: int, chan_vals: np.ndarray, color) -> None:
+        """Paint one channel into its texture: brightness ~ value, marker at the centre."""
+        tex, rgba, img = self._grid_textures[i]
+        # flip vertically so the tile's "up" matches the map's (larger world-y at top)
+        v = np.flipud(np.clip(chan_vals, 0.0, 1.0))
+        rgba[..., 0] = (color[0] * v).astype(np.uint8)
+        rgba[..., 1] = (color[1] * v).astype(np.uint8)
+        rgba[..., 2] = (color[2] * v).astype(np.uint8)
+        rgba[..., 3] = np.where(v > 0.0, 235, 60).astype(np.uint8)   # faint where unseen/empty
+        c = v.shape[0] // 2                                          # agent sits at the centre
+        rgba[c, c] = (255, 255, 255, 255)
+        img.frombytes(rgba.tobytes())
+        self.ctx.default_atlas.update_texture_image(tex)
 
     # ------------------------------------------------------------------ input
     def on_resize(self, width: int, height: int):
@@ -258,6 +382,29 @@ class EcosystemViewer(arcade.Window):
         self._mouse_x, self._mouse_y = x, y
         # remember the world point grabbed under the cursor so right-drag can keep it there
         self._pan_anchor = self.world_camera.unproject((x, y))
+        # left-click selects the nearest animal under the cursor for the perception inspector
+        # (left-drag never pans, so this can't be confused with a pan gesture)
+        if button == arcade.MOUSE_BUTTON_LEFT:
+            self._selected_slot = self._pick_entity(x, y)
+
+    def _pick_entity(self, screen_x, screen_y):
+        """Slot of the nearest alive animal within a small screen-radius of the cursor.
+
+        Returns the entity slot index, or None if the click landed on empty ground.
+        """
+        ent = self.sim.entities
+        slots = np.nonzero(ent.alive)[0]
+        if slots.shape[0] == 0:
+            return None
+        sx, sy = self._world_to_screen(ent.pos_x[slots], ent.pos_y[slots])
+        # entity content-pixel coords -> screen coords via the world camera projection
+        proj = [self.world_camera.project((px, py))
+                for px, py in zip(sx.tolist(), sy.tolist())]
+        scr = np.array([(p.x, p.y) for p in proj], dtype=np.float32)
+        d2 = (scr[:, 0] - screen_x) ** 2 + (scr[:, 1] - screen_y) ** 2
+        i = int(np.argmin(d2))
+        # accept only a reasonably close click (~14 px) so empty space deselects
+        return int(slots[i]) if d2[i] <= 14.0 ** 2 else None
 
     def on_mouse_scroll(self, x, y, scroll_x, scroll_y):
         self._mouse_x, self._mouse_y = x, y
