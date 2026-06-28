@@ -8,8 +8,7 @@ can be measured.
 
 This is **v1**: the brain is hardcoded rules, but the architecture around it (batched
 brain system, per-species egocentric perception **grids** + scalar schemas, SoA entity
-store) is built so a PyTorch neural brain — the grids are already a CNN's channel-stack —
-can be dropped in later with **zero sim rewrite**.
+store) is built so a PyTorch neural brain can be dropped in later with **zero sim rewrite**.
 
 ## Documentation
 
