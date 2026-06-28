@@ -147,38 +147,12 @@ class Config:
         return np.random.default_rng(self.seed)
 
 
-def make_config(seed: int | None = None, map_scale: float = 1.0,
-                **world_overrides) -> Config:
-    """Convenience builder. ``seed`` overrides both the master seed and world seed.
-
-    ``map_scale`` resizes the whole map: 1.0 = default (208x117), 2.0 = twice as wide
-    and tall, 0.5 = half. Both dimensions scale together so the 16:9 shape is kept.
-    Because the predator-prey balance is density-driven (see CLAUDE.md calibration
-    notes), starting/ cap populations, river count, and the entity pool scale with the
-    map's *area* (``map_scale**2``) so a bigger world stays just as alive rather than
-    thinning out into an Allee collapse.
-    """
+def make_config(seed: int | None = None, **world_overrides) -> Config:
+    """Convenience builder. ``seed`` overrides both the master seed and world seed."""
     cfg = Config()
     if seed is not None:
         cfg.seed = seed
         cfg.world = replace(cfg.world, seed=seed)
-    if map_scale != 1.0:
-        if map_scale <= 0:
-            raise ValueError("map_scale must be > 0")
-        w = max(16, round(cfg.world.width * map_scale))
-        h = max(16, round(cfg.world.height * map_scale))
-        area = (w * h) / (cfg.world.width * cfg.world.height)
-        cfg.world = replace(
-            cfg.world, width=w, height=h,
-            n_river_sources=max(1, round(cfg.world.n_river_sources * area)))
-        cfg.species = {
-            sid: replace(
-                spec,
-                init_count=max(2, round(spec.init_count * area)),
-                population_cap=max(spec.init_count, round(spec.population_cap * area)))
-            for sid, spec in cfg.species.items()
-        }
-        cfg.sim = replace(cfg.sim, max_entities=max(64, round(cfg.sim.max_entities * area)))
     if world_overrides:
         cfg.world = replace(cfg.world, **world_overrides)
     return cfg
