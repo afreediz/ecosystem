@@ -57,6 +57,9 @@ class Simulation:
         self.tick = 0
         # per-tick stats populated by step() for the logger / HUD
         self.stats = {}
+        # latest perception, exposed for observers (live viewer entity inspector); set by step()
+        self.last_obs = None
+        self.last_obs_idx = None
 
         self._seed_population()
 
@@ -142,6 +145,12 @@ class Simulation:
 
         # 3. perception -> obs matrix (LOCAL, radius-gated)
         obs, idx = self.perception.build(temp_field)
+        # keep a handle on this tick's observation + its slot mapping so an observer (the
+        # live viewer) can inspect a single agent's perception grids. ``idx`` is captured
+        # here, BEFORE it gets filtered for deaths below, so obs row i still maps to slot
+        # ``obs_idx[i]``. Both are read-only for observers and overwritten next tick.
+        self.last_obs = obs
+        self.last_obs_idx = idx
 
         # 4. batched brain decision
         act = self.brain_system.decide(obs)
