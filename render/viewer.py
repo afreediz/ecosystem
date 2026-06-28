@@ -217,7 +217,7 @@ class EcosystemViewer(arcade.Window):
         self._mouse_x, self._mouse_y = x, y
         # pan only while RIGHT (or middle) is held; left-drag does nothing so a plain
         # click never shifts the map.
-        if not (buttons & (arcade.MOUSE_BUTTON_RIGHT | arcade.MOUSE_BUTTON_MIDDLE)):
+        if not (buttons & (arcade.MOUSE_BUTTON_MIDDLE)):
             return
         if self._pan_anchor is None:
             self._pan_anchor = self.world_camera.unproject((x, y))
