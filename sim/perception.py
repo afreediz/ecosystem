@@ -27,7 +27,7 @@ so they carry no ``threat`` channel.
 SCALARS (obs.scalars: (N, SCALAR_DIM), float32) -- identical layout for both species:
   0 hunger | 1 thirst | 2 energy | 3 health | 4 age/max_age | 5 sex
   6 temperature(own cell) | 7 time_of_day | 8 season
-  9 sensory_range (cells; for distance normalization + CNN) | 10 diet (1=carnivore)
+  9 sensory_range (cells; for distance normalization + CNN)
 """
 from __future__ import annotations
 
@@ -57,8 +57,8 @@ NUM_BIOMES = 7                      # see sim/world.py biome ids (OCEAN..PLAINS)
 
 # --- scalar layout (shared by both species) ---
 (S_HUNGER, S_THIRST, S_ENERGY, S_HEALTH, S_AGE, S_SEX,
- S_TEMP, S_TIME, S_SEASON, S_SENSORY, S_DIET) = range(11)
-SCALAR_DIM = 11
+ S_TEMP, S_TIME, S_SEASON, S_SENSORY) = range(10)
+SCALAR_DIM = 10
 
 
 class Observation:
@@ -186,7 +186,6 @@ class Perception:
         s[:n, S_TIME] = self.env.time_of_day
         s[:n, S_SEASON] = self.env.season
         s[:n, S_SENSORY] = sens
-        s[:n, S_DIET] = 1.0 if sid == FOX else 0.0
 
         return Observation(grids[:n], scalars[:n], self.R, sp_idx, sid)
 
