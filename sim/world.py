@@ -104,8 +104,10 @@ class World:
         # to forage, where they become vulnerable.
         self.cover = (self.biome == FOREST) | (self.biome == MOUNTAIN)
 
-        # passability: ocean and very high mountain block movement
-        self.passable = ~self.ocean & (self.elevation <= 0.97)
+        # passability: open water (ocean + rivers/lakes) and very high mountain block
+        # movement. Animals can't walk across water; they drink from an adjacent cell
+        # (consumption.py allows drinking when within eat range of freshwater).
+        self.passable = ~self.water_any & (self.elevation <= 0.97)
 
         # nearest-freshwater fields for perception (direction + distance to drink)
         self._build_freshwater_fields()

@@ -19,8 +19,8 @@ SPECIES_NAMES = {SHEEP: "sheep", FOX: "fox"}
 
 @dataclass
 class WorldConfig:
-    width: int = 160
-    height: int = 160
+    width: int = 208                    # 16:9 (208x117) to match a widescreen display;
+    height: int = 117                   # area ~= the old 160x160 so dynamics stay similar
     seed: int = 12345
     noise_octaves: int = 5
     noise_scale: float = 0.012          # base frequency for elevation noise

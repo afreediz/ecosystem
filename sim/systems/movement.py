@@ -3,7 +3,8 @@
 Converts desired headings (action dims 0,1) into new positions with turn-rate-limited
 steering (this is where exploration momentum lives -- the stateless brain emits a fresh
 random heading each tick, and the limited turn rate turns that into a smooth wander).
-Blocks movement into ocean / impassable terrain; freshwater is passable (drink at edge).
+Blocks movement into water (ocean + rivers/lakes) / impassable terrain; animals drink
+from an adjacent land cell rather than walking onto the water.
 Terrain slope scales effective speed. Updates heading arrays for next tick.
 """
 from __future__ import annotations
