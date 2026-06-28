@@ -382,6 +382,43 @@ global env that don't belong on a spatial grid:
 systems stay aligned to one set. Each `Observation` also carries its own `idx` (the global
 slot ids of its rows) so per-species results scatter back into the global ordering.
 
+### What an Observation actually looks like
+
+A concrete sheep, pulled live from a run (`R = 28`, so each grid is `K = 57` wide). Its
+`Observation.grids` is `(5, 57, 57)` — five channels, each a 57×57 egocentric window with the
+sheep at the centre cell `[28, 28]`. Here is the **7×7 patch around that centre** for three
+of the channels (the full window extends 28 cells further out in every direction, masked to a
+disc of the sheep's own `sensory_range ≈ 20`):
+
+```
+terrain (normalized biome id)          food (= grass field)              mate (1 = a mateable sheep)
+ .86 .86 .86 .86 .86 .86 .86           .05 .05 .06 .06 .04 .05 .05        0  0  0  1  0  0  0
+ .86 .86 .86 .86 .86 .86 .86           .19 .04 .05 .03 .05 .05 .05        0  0  0  0  0  0  0
+ .86 .86 .86 .86 .86 .86 .86           .14 .05 .04 .05 .06 .04 .05        0  0  1  0  0  0  0
+1.0  .86 .86 [.86] .86 .86 .86         .06 .04 .06 [.06] .06 .04 .05      0  0  0 [0] 0  0  0
+1.0 1.0  .86 .86 .86 .86 .86           .15 .04 .04 .15 .04 .05 .05        0  0  0  0  0  0  0
+1.0 1.0 1.0  .86 .86 .86 .29           .03 .04 .05 .05 .05 .05 .04        0  0  0  0  0  0  0
+1.0 1.0 1.0 1.0  .86 .86 .29           .04 .05 .07 .06 .04 .05 .05        0  0  0  0  0  0  0
+```
+
+(`[·]` marks the agent's own cell.) Reading it: the sheep stands in **forest** (`.86`) with a
+strip of a different biome (`1.0`) to the lower-left and a sliver of another (`.29`) at the
+edge; **grass** is thin all around with a couple of richer patches up-left (`.19`); the
+**water** and **threat** channels are all-zero (no river or fox in sight); and **two other
+sheep** are visible — one is an adjacent mateable conspecific just above-left. A fox would
+have a 4-channel `(4, 57, 57)` window instead (no threat channel, and `food` = exposed prey).
+
+Its **scalars** (length 10) for the same tick:
+
+```
+[0.06, 0.53, 0.86, 1.0, 0.16, 1.0, 0.25, 0.5, 0.03, 19.83]
+  hung  thir  enrg  hlth  age   sex  temp  tod  seas  sensory_range
+```
+
+So: barely hungry (0.06), half-thirsty (0.53), well-fuelled (energy 0.86, health 1.0), young
+(16% of lifespan), male, in a temperate cell at midday in early spring, with a vision radius
+of ~20 cells.
+
 **Why local-only:** global knowledge is omniscience and contradicts reality. Local-only
 perception is also what *creates the need for memory* later — it makes the future LSTM/memory
 phase meaningful rather than redundant. Blind time becomes exploration in v1; informed
@@ -423,6 +460,29 @@ Two refinements that matter:
 The brain only *proposes* eat/drink/reproduce via gates; the consumption and reproduction
 **systems** enforce the authoritative world conditions (true adjacency, true eligibility).
 That's why the stateless brain needs no hidden world access.
+
+### What the brain outputs
+
+For a batch of `N` agents the brain returns an `(N, 5)` action matrix — one row per agent,
+columns `[A_DX, A_DY, A_EAT, A_DRINK, A_REPRO]`. Two real rows from the run above:
+
+```
+[ 0.00, -1.00,  1.0, 1.0, 1.0 ]   # heading straight "up"; eat + drink + reproduce all gated
+[ 0.83,  0.56,  1.0, 0.0, 0.0 ]   # heading up-right; eat gated, no drink, no reproduce
+```
+
+- **`A_DX, A_DY`** are a unit heading vector (the movement system smooths it via a turn-rate
+  limit into momentum-carrying motion). The first agent points straight along −y toward its
+  adjacent mate; the second wanders/forages along a diagonal.
+- **`A_EAT, A_DRINK, A_REPRO`** are gates in `[0,1]` (here either `1.0` or `0.0`). The first
+  agent is adjacent to grass, water *and* a mate, so it raises all three; the second only
+  raises eat.
+
+Remember these are **proposals**: a raised gate just means "a target read close enough"
+(within 25% of sensory range). The consumption/reproduction systems still re-check true world
+adjacency and eligibility, so raising `A_REPRO` doesn't guarantee a birth. A future neural
+brain would emit the same five numbers, but with *continuous* gate values that the systems
+threshold at `> 0.5`.
 
 ---
 
