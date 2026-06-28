@@ -76,6 +76,41 @@ class Simulation:
                                     size=n).astype(np.float32)
             self.entities.spawn(spec, genomes, pos, self.rng, energy=0.8, age=ages)
 
+    def spawn_at(self, species_id: int, x: float, y: float, n: int = 1) -> np.ndarray:
+        """Spawn ``n`` adult animals of ``species_id`` near world coords ``(x, y)``.
+
+        Used by the live viewer for manual spawning. Clamps into the world and nudges to
+        the nearest passable land cell if the target is water/blocked; returns [] if none
+        is found nearby. NOTE: this draws from the master RNG, so manual spawning (like any
+        live interaction) breaks run reproducibility -- it is never used by the headless path.
+        """
+        spec = self.cfg.species[species_id]
+        x = float(np.clip(x, 0.0, self.world.w - 1e-3))
+        y = float(np.clip(y, 0.0, self.world.h - 1e-3))
+        if not bool(self.world.is_passable(x, y)):
+            spot = self._nearest_passable(x, y)
+            if spot is None:
+                return np.empty(0, dtype=np.intp)
+            x, y = spot
+        genomes = gn.random_genomes(spec, n, self.rng)
+        jitter = self.rng.uniform(-0.3, 0.3, size=(n, 2)).astype(np.float32) if n > 1 else 0.0
+        pos = (np.array([x, y], dtype=np.float32) + jitter).reshape(n, 2)
+        ages = self.rng.uniform(spec.maturity_age, spec.maturity_age * 3.0,
+                                size=n).astype(np.float32)
+        return self.entities.spawn(spec, genomes, pos, self.rng, energy=0.8, age=ages)
+
+    def _nearest_passable(self, x: float, y: float):
+        """Nearest passable land cell center to (x, y), searching outward up to 6 cells."""
+        cx, cy = int(x), int(y)
+        for r in range(0, 7):
+            for dy in range(-r, r + 1):
+                for dx in range(-r, r + 1):
+                    nx, ny = cx + dx, cy + dy
+                    if 0 <= nx < self.world.w and 0 <= ny < self.world.h:
+                        if self.world.passable[ny, nx]:
+                            return (nx + 0.5, ny + 0.5)
+        return None
+
     def _rebuild_grids(self):
         ent = self.entities
         alive = ent.alive_indices()

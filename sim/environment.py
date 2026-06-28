@@ -15,6 +15,38 @@ CLEAR, RAIN, HEAT = range(3)
 WEATHER_NAMES = {CLEAR: "clear", RAIN: "rain", HEAT: "heat"}
 
 
+def season_name(season: float) -> str:
+    """Season label, anchored to the temperature model (summer warmest at 0.5,
+    winter coldest at 0.0/1.0, spring rising at 0.25, autumn falling at 0.75)."""
+    s = season % 1.0
+    if s < 0.125 or s >= 0.875:
+        return "winter"
+    if s < 0.375:
+        return "spring"
+    if s < 0.625:
+        return "summer"
+    return "autumn"
+
+
+def daytime_name(time_of_day: float) -> str:
+    """Time-of-day label. t=0.0 is pre-dawn (coldest), 0.25 sunrise, ~0.55 midday,
+    ~0.75 sunset (see the diurnal temperature curve below)."""
+    t = time_of_day % 1.0
+    if t < 0.20:
+        return "night"
+    if t < 0.30:
+        return "dawn"
+    if t < 0.45:
+        return "morning"
+    if t < 0.55:
+        return "noon"
+    if t < 0.75:
+        return "afternoon"
+    if t < 0.85:
+        return "dusk"
+    return "night"
+
+
 class Environment:
     def __init__(self, cfg: EnvConfig, rng: np.random.Generator):
         self.cfg = cfg
@@ -27,11 +59,20 @@ class Environment:
         self._diurnal_offset = 0.0
         self._weather_offset = 0.0
 
+        # season is normally driven by ``t`` but can be paused or nudged forward at
+        # runtime (live viewer controls). With no manual input these stay neutral, so a
+        # headless run is byte-for-byte identical to the original t-derived season.
+        self.season_paused = False
+        self._season_phase = 0.0    # auto-advancing fraction of a year
+        self._season_shift = 0.0    # manual forward offset
+
     def update(self, dt: float) -> None:
         c = self.cfg
         self.t += dt
         self.time_of_day = (self.t % c.day_length) / c.day_length
-        self.season = (self.t % c.year_length) / c.year_length
+        if not self.season_paused:
+            self._season_phase += dt / c.year_length
+        self.season = (self._season_phase + self._season_shift) % 1.0
 
         # diurnal: coldest before dawn (~0.0), warmest mid-afternoon (~0.6)
         self._diurnal_offset = c.diurnal_amp * np.sin(2 * np.pi * (self.time_of_day - 0.25))
@@ -47,6 +88,16 @@ class Environment:
             self._weather_offset = -0.05
         else:
             self._weather_offset = 0.0
+
+    # ------------------------------------------------------------------ season control
+    def advance_season(self, amount: float = 0.1) -> None:
+        """Push the season forward by ``amount`` of a year (wraps at 1.0)."""
+        self._season_shift = (self._season_shift + amount) % 1.0
+
+    def toggle_season_pause(self) -> bool:
+        """Freeze/unfreeze seasonal progression (day & weather keep running)."""
+        self.season_paused = not self.season_paused
+        return self.season_paused
 
     @property
     def temp_offset(self) -> float:
