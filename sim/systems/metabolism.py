@@ -61,6 +61,8 @@ def apply(cfg, world, ent, idx, temp_field, env, rng):
     # aging
     ent.age[idx] = ent.age[idx] + dt
     ent.repro_cooldown[idx] = np.maximum(0.0, ent.repro_cooldown[idx] - dt)
+    # cosmetic mating glow fades out (viewer-only; does not influence any decision)
+    ent.mating_glow[idx] = np.maximum(0.0, ent.mating_glow[idx] - dt)
 
     # --- deaths ---
     energy = ent.energy[idx]

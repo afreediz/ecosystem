@@ -131,6 +131,8 @@ class SimConfig:
     eat_radius: float = 1.6             # adjacency distance for eat/drink/attack
     repro_radius: float = 2.0           # adjacency distance for mating
     food_eat_threshold: float = 0.15    # min vegetation in a cell to be worth eating
+    mating_glow_duration: float = 12.0  # ticks a pair stays "rose"-tinted after breeding
+                                        # (cosmetic only; read by the viewer, not the sim)
 
 
 @dataclass

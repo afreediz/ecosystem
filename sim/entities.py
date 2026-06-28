@@ -13,6 +13,11 @@ import numpy as np
 from config import Config, SpeciesConfig
 from sim import genome as gn
 
+# Sex labels for the ``sex`` array (random 50/50 at birth; non-heritable). The choice of
+# which integer is male is arbitrary -- it only drives the viewer's male marker.
+FEMALE = 0
+MALE = 1
+
 
 class Entities:
     def __init__(self, cfg: Config):
@@ -34,6 +39,9 @@ class Entities:
         self.species = np.full(cap, -1, dtype=np.int8)
         self.genome = np.zeros((cap, gn.N_GENES), dtype=np.float32)
         self.repro_cooldown = np.zeros(cap, dtype=np.float32)
+        # cosmetic countdown (ticks): >0 means "recently bred" -> viewer tints it rose.
+        # Never read by any decision/system, so it cannot affect determinism.
+        self.mating_glow = np.zeros(cap, dtype=np.float32)
         self.alive = np.zeros(cap, dtype=bool)
 
         # free list of available slots (stack; pop from the end)
@@ -90,6 +98,7 @@ class Entities:
         self.species[slots_k] = spec.species_id
         self.genome[slots_k] = genomes[:k]
         self.repro_cooldown[slots_k] = 0.0
+        self.mating_glow[slots_k] = 0.0    # recycled slots must not inherit a stale glow
         self.alive[slots_k] = True
         return slots_k
 

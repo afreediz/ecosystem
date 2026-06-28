@@ -20,8 +20,14 @@ from PIL import Image
 import arcade
 
 from config import Config, SHEEP, FOX
+from sim.entities import MALE
 from sim.simulation import Simulation
 from sim.world import BIOME_COLORS
+
+# Both species flash this rose hue for a few ticks right after they breed.
+MATING_COLOR = (255, 80, 150)
+# Small black marker drawn at the top-right of every male.
+MALE_MARK_COLOR = (0, 0, 0)
 
 
 class EcosystemViewer(arcade.Window):
@@ -152,22 +158,42 @@ class EcosystemViewer(arcade.Window):
             arcade.draw_texture_rect(
                 self._veg_texture, arcade.LBWH(0, 0, self._content_w, self._content_h))
 
-        ent = self.sim.entities
-        # sheep
-        sheep = np.nonzero(ent.species_mask(SHEEP))[0]
-        if sheep.shape[0]:
-            sx, sy = self._world_to_screen(ent.pos_x[sheep], ent.pos_y[sheep])
-            pts = list(zip(sx.tolist(), sy.tolist()))
-            arcade.draw_points(pts, (245, 245, 245), max(2.0, self.scale * 0.8))
-        # fox
-        fox = np.nonzero(ent.species_mask(FOX))[0]
-        if fox.shape[0]:
-            fx, fy = self._world_to_screen(ent.pos_x[fox], ent.pos_y[fox])
-            pts = list(zip(fx.tolist(), fy.tolist()))
-            arcade.draw_points(pts, (220, 70, 40), max(3.0, self.scale * 1.1))
+        # sheep then fox; each gets a male marker + a rose tint while mating
+        self._draw_species(SHEEP, (245, 245, 245), max(2.0, self.scale * 0.8))
+        self._draw_species(FOX, (220, 70, 40), max(3.0, self.scale * 1.1))
 
         self.gui_camera.use()
         self._draw_hud()
+
+    def _draw_species(self, species_id: int, base_color, size: float) -> None:
+        """Draw one species as a point cloud, with two per-entity overlays:
+
+        * animals that bred in the last ``mating_glow_duration`` ticks are tinted
+          ``MATING_COLOR`` instead of their species color;
+        * every male gets a small black dot offset to its top-right.
+        """
+        ent = self.sim.entities
+        slots = np.nonzero(ent.species_mask(species_id))[0]
+        if slots.shape[0] == 0:
+            return
+        sx, sy = self._world_to_screen(ent.pos_x[slots], ent.pos_y[slots])
+
+        mating = ent.mating_glow[slots] > 0.0
+        normal = ~mating
+        if normal.any():
+            arcade.draw_points(list(zip(sx[normal].tolist(), sy[normal].tolist())),
+                               base_color, size)
+        if mating.any():
+            arcade.draw_points(list(zip(sx[mating].tolist(), sy[mating].tolist())),
+                               MATING_COLOR, size)
+
+        # male marker: a small black dot nudged toward the top-right of the body
+        male = ent.sex[slots] == MALE
+        if male.any():
+            off = max(1.0, size * 0.55)
+            mx = (sx[male] + off).tolist()
+            my = (sy[male] + off).tolist()
+            arcade.draw_points(list(zip(mx, my)), MALE_MARK_COLOR, max(1.5, size * 0.5))
 
     def _draw_hud(self):
         s = self.sim.stats
@@ -183,6 +209,7 @@ class EcosystemViewer(arcade.Window):
             f"{season_tag} ({env.season:.2f})   weather {WEATHER_NAMES[env.weather]}",
             f"births {s.get('births', 0)}  deaths {s.get('deaths', 0)} "
             f"(pred {s.get('death_predation', 0)})",
+            "male: black dot (top-right)   mating: rose tint",
         ]
         # dark translucent backing so white text stays readable over light terrain
         # (snow / beach / grazed grass) -- without it the HUD "disappears" on bright cells.
