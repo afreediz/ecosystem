@@ -57,9 +57,9 @@ class Simulation:
         self.tick = 0
         # per-tick stats populated by step() for the logger / HUD
         self.stats = {}
-        # latest perception, exposed for observers (live viewer entity inspector); set by step()
+        # latest per-species perception {species_id: Observation}, exposed for observers
+        # (live viewer entity inspector); set by step(). Each Observation carries its own idx.
         self.last_obs = None
-        self.last_obs_idx = None
 
         self._seed_population()
 
@@ -143,21 +143,20 @@ class Simulation:
         self.perception._species_grids = self._species_grids
         self.perception.veg = self.veg
 
-        # 3. perception -> obs matrix (LOCAL, radius-gated)
-        obs, idx = self.perception.build(temp_field)
-        # keep a handle on this tick's observation + its slot mapping so an observer (the
-        # live viewer) can inspect a single agent's perception grids. ``idx`` is captured
-        # here, BEFORE it gets filtered for deaths below, so obs row i still maps to slot
-        # ``obs_idx[i]``. Both are read-only for observers and overwritten next tick.
-        self.last_obs = obs
-        self.last_obs_idx = idx
+        # 3. perception -> per-species observations (LOCAL, radius-gated) + global idx
+        obs_by_species, idx = self.perception.build(temp_field)
+        # keep a handle on this tick's per-species observations so an observer (the live
+        # viewer) can inspect a single agent's perception grids. Each Observation carries its
+        # own ``idx`` (global slot ids of its rows), captured here BEFORE deaths are filtered
+        # below, so obs row i still maps to its slot. Read-only; overwritten next tick.
+        self.last_obs = obs_by_species
 
-        # 4. batched brain decision
-        act = self.brain_system.decide(obs)
+        # 4. batched brain decision (per-species decode -> act aligned to the global idx)
+        act = self.brain_system.decide(obs_by_species, idx)
 
         # 5. circadian rest: night-time sleepers head for cover, then bed down. Gates the
         #    action matrix (and sets ent.asleep) BEFORE movement/consumption read it.
-        n_asleep = sleep.apply(self.cfg, world, ent, idx, act, obs, self.env)
+        n_asleep = sleep.apply(self.cfg, world, ent, idx, act, obs_by_species, self.env)
 
         # 6. movement
         movement.apply(self.cfg, world, ent, idx, act, self.rng)

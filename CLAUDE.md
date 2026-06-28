@@ -19,17 +19,23 @@ in behind the same contract with no sim rewrite.
 - **`sim/` never imports `render/`.** The sim core is pure numbers. Verify with:
   `grep -rn --include=*.py "^\s*\(import render\|from render\)" sim/` → must be empty.
 - **Brain↔world contract is the spine.** All decisions go through
-  `Brain.decide(obs) -> act` where `obs` is an `Observation` (egocentric perception
-  **grids** + a scalar vector) and `act` is the batched `(N, ACT_DIM=5)` action matrix
+  `Brain.decide(obs_by_species, idx) -> act` where `obs_by_species` maps each species to its
+  `Observation` (egocentric perception **grids** + a scalar vector) and `act` is the batched
+  `(len(idx), ACT_DIM=5)` action matrix aligned to the **global** alive ordering `idx`
   (`sim/perception.py` defines obs, `sim/brain.py` defines act). The brain sees ONLY the
-  observation — no hidden state. `obs.grids` is `(N, N_CHANNELS=6, K, K)` egocentric
-  channels (terrain, water, vegetation, food-entities, threats, mates) centred on each
-  agent, with `K = 2*R+1` and `R = ceil(max sensory_range)`; cells beyond an agent's own
-  `sensory_range` or off-world are zeroed. `obs.scalars` is `(N, SCALAR_DIM=11)` internal
-  state + global env. The grids are CNN-channel-ready (the whole point of the grid design);
-  the `RuleBrain` first *decodes* the channels it needs back into nearest/best targets
-  (`nearest_in_channel` / `best_in_channel` in `sim/brain.py`) since a rule brain can't
-  convolve. Adjacency / reproduction eligibility are proxied from obs in the brain; the
+  observations — no hidden state. Perception is **per-species**: each carries only the
+  channels it uses, so a future per-species CNN has no dead inputs. `obs.grids` is
+  `(N, C, K, K)` egocentric channels centred on each agent, with `K = 2*R+1` and
+  `R = ceil(max sensory_range)`; cells beyond an agent's own `sensory_range` or off-world
+  are zeroed. Layouts: **sheep** = `terrain, water, food(=grass field), threat(=foxes),
+  mate` (5); **fox** = `terrain, water, food(=exposed prey), mate` (4). The `food` channel
+  is species-specific in content (grass for herbivores, prey for carnivores). `obs.scalars`
+  is `(N, SCALAR_DIM=11)` internal state + global env. The grids are CNN-channel-ready (the
+  whole point of the grid design); the `RuleBrain` decodes each species separately into
+  nearest/best targets (`nearest_in_channel` / `best_in_channel` in `sim/brain.py`) since a
+  rule brain can't convolve, but draws explore headings ONCE over the global ordering so
+  partitioning perception by species does not change the run. Adjacency / reproduction
+  eligibility are proxied from obs in the brain; the
   consumption/reproduction **systems** enforce the authoritative world conditions.
 - **Structure-of-Arrays.** Entity state is parallel NumPy arrays in `sim/entities.py`,
   indexed by slot, with an `alive` mask + free list. Never one-object-per-entity.
