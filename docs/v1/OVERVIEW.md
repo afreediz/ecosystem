@@ -378,6 +378,28 @@ fills more of the same 57×57 canvas; the radius is the heritable `sensory_range
 **how much of the world an animal can see is itself an evolvable trait.** A neural CNN reads
 these masked discs directly as image channels.
 
+**How position is encoded (local coordinates).** The agent does *not* read a grid of
+distances. Position is encoded **implicitly by *where* a value sits** in the window: a
+non-zero cell at offset `(dy, dx)` from the centre simply *means* "this thing is `dx` cells
+east and `dy` cells south of me." Each channel stores only *what* is there (a terrain value, a
+grass level, a `1.0` presence mark) at the right egocentric offset — never an explicit
+distance. That said, a distance-from-centre stencil does exist internally,
+
+```
+2.8 2.2 2.0 2.2 2.8
+2.2 1.4 1.0 1.4 2.2
+2.0 1.0 0.0 1.0 2.0     ← the agent sits on the 0.0
+2.2 1.4 1.0 1.4 2.2
+2.8 2.2 2.0 2.2 2.8
+```
+
+and it is used in exactly two places: (1) **carving the disc** — the eye-mask above is just
+`stencil ≤ sensory_range`; and (2) **the rule brain's decode** — to scan a channel, find the
+nearest (or best-scoring) present cell, and read off its local offset `(dx, dy)` and distance
+`d`. That `(dx, dy)` becomes the steering heading and `d / sensory_range` the normalized
+"is it adjacent / in flee range?" check (see §9). A neural CNN skips step 2 entirely —
+convolutions read position straight from the grid layout.
+
 Perception is **separated by species** — each carries only the channels it actually uses, so
 a future per-species CNN has no dead inputs:
 
