@@ -343,6 +343,41 @@ raw local view of one thing. Cells beyond the agent's **own** heritable `sensory
 its eyes can reach. The defining rule still holds: **no entity ever queries a global
 "nearest".**
 
+**Disc vision, egocentric.** The window is square only because tensors are; what the agent
+*sees* is a **circle**. Every channel is multiplied by a circular mask of the agent's own
+`sensory_range`, so cells outside that radius read `0`. And the view is **egocentric** —
+the agent is always at the exact centre `[R, R]`, with everything positioned *relative to
+it*; "up" in the grid is the same world direction for every agent, but each grid is recentred
+on its own owner. Here is the actual eye-mask for a small-eyed sheep (`sensory_range = 8`),
+cropped to ±9 cells around the centre — `#` = visible, `.` = masked to zero:
+
+```
+. . . . . . . . . . . . . . . . . . .
+. . . . . . . . . # . . . . . . . . .
+. . . . . . # # # # # # # . . . . . .
+. . . . # # # # # # # # # # # . . . .
+. . . # # # # # # # # # # # # # . . .
+. . . # # # # # # # # # # # # # . . .
+. . # # # # # # # # # # # # # # # . .
+. . # # # # # # # # # # # # # # # . .
+. . # # # # # # # # # # # # # # # . .
+. # # # # # # # # # ● # # # # # # # # .
+. . # # # # # # # # # # # # # # # . .
+. . # # # # # # # # # # # # # # # . .
+. . # # # # # # # # # # # # # # # . .
+. . . # # # # # # # # # # # # # . . .
+. . . # # # # # # # # # # # # # . . .
+. . . . # # # # # # # # # # # . . . .
+. . . . . . # # # # # # # . . . . . .
+. . . . . . . . . # . . . . . . . . .
+. . . . . . . . . . . . . . . . . . .
+```
+
+(`●` is the agent itself.) A bigger-eyed sheep (`sensory_range` up to 22) or a fox (up to 28)
+fills more of the same 57×57 canvas; the radius is the heritable `sensory_range` gene, so
+**how much of the world an animal can see is itself an evolvable trait.** A neural CNN reads
+these masked discs directly as image channels.
+
 Perception is **separated by species** — each carries only the channels it actually uses, so
 a future per-species CNN has no dead inputs:
 
@@ -399,18 +434,6 @@ terrain (normalized biome id)          food (= grass field)              mate (1
 1.0 1.0  .86 .86 .86 .86 .86           .15 .04 .04 .15 .04 .05 .05        0  0  0  0  0  0  0
 1.0 1.0 1.0  .86 .86 .86 .29           .03 .04 .05 .05 .05 .05 .04        0  0  0  0  0  0  0
 1.0 1.0 1.0 1.0  .86 .86 .29           .04 .05 .07 .06 .04 .05 .05        0  0  0  0  0  0  0
-
-circular vision (1 = visible)
-0  0  0  0  0  0  0  0  0
-0  0  0  0  1  0  0  0  0
-0  0  0  1  1  1  0  0  0
-0  0  1  1  1  1  1  0  0
-0  1  1  1 [1] 1  1  1  0
-0  0  1  1  1  1  1  0  0
-0  0  0  1  1  1  0  0  0
-0  0  0  0  1  0  0  0  0
-0  0  0  0  0  0  0  0  0
-
 ```
 
 (`[·]` marks the agent's own cell.) Reading it: the sheep stands in **forest** (`.86`) with a
