@@ -339,7 +339,7 @@ max_speed         1.212     1.976
 sensory_range    14.974    24.393
 metabolism_rate   1.189     0.841
 size              0.997     1.104
-max_age        1919.0    2799.1
+max_age          1919.0    2799.1
 repro_threshold   0.611     0.649
 flee_distance     0.692     0.700   (sheep gene; pinned for fox)
 aggression        0.700     0.887   (fox gene;   pinned for sheep)
