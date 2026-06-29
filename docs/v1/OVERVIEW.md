@@ -327,6 +327,50 @@ neutral default and is ignored.
 cloning, and the proximity-of-two-adults requirement ties directly into local perception
 (you must *find* a mate, you can't teleport to one).
 
+### What a real genome looks like
+
+The gene vector is just `N_GENES = 9` floats in the fixed order above. Two individuals pulled
+live from a run — note how the species' different ranges show up (the fox is faster, sees
+farther, lives longer; `aggression` is a real fox gene but sits pinned for the sheep):
+
+```
+gene             sheep      fox
+max_speed         1.212     1.976
+sensory_range    14.974    24.393
+metabolism_rate   1.189     0.841
+size              0.997     1.104
+max_age        1919.0    2799.1
+repro_threshold   0.611     0.649
+flee_distance     0.692     0.700   (sheep gene; pinned for fox)
+aggression        0.700     0.887   (fox gene;   pinned for sheep)
+chronotype        0.054     0.047
+```
+
+### An inheritance event (crossover + mutation)
+
+When two adults breed, each child gene is picked 50/50 from one parent (**crossover**), then
+each gene may be nudged by a Gaussian and clamped (**mutation**). A real sheep child bred
+from two real parents:
+
+```
+gene             parentA   parentB   from   child
+max_speed          0.778     1.260     A     0.778
+sensory_range      9.601    14.426     A     9.601
+metabolism_rate    1.032     1.286     B     1.300  ← MUTATED (1.286 + nudge, clamped to 1.3 ceiling)
+size               1.165     1.031     A     1.165
+max_age         2134.5    1592.8       B  1592.8
+repro_threshold    0.725     0.659     B     0.659
+flee_distance      0.490     0.827     A     0.490
+chronotype        -0.040    -0.046     A    -0.040
+```
+
+Reading it: most genes are copied intact from whichever parent the per-gene coin chose (here
+5 from A, 3 from B). One gene — `metabolism_rate` — also *mutated*: it was inherited from
+parent B (1.286), pushed up by the Gaussian, and **clamped to the species ceiling 1.3**. Over
+thousands of such events, selection on which children survive to breed is what drives the
+trait drift the run logs (§12). Note `aggression` isn't shown — it's a fox gene, pinned for
+sheep, so crossover/mutation are no-ops on it.
+
 ---
 
 ## 8. Perception — local, egocentric, per-species grids
