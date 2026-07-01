@@ -85,7 +85,9 @@ class EcosystemViewer(arcade.Window):
         self._content_h = self.sim.world.h * scale
 
         disp_w, disp_h = arcade.get_display_size()
-        max_w, max_h = int(disp_w * 0.9), int(disp_h * 0.9)
+        # fill most of the display: the sim window is the main view (the monitor window,
+        # if open, is deliberately compact). The camera zoom fits the map to the window.
+        max_w, max_h = int(disp_w * 0.98), int(disp_h * 0.95)
         win_w = min(self._content_w, max_w)
         win_h = min(self._content_h, max_h)
         super().__init__(win_w, win_h, "Ecosystem + Evolution (v1)", resizable=True)

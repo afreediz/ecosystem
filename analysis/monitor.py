@@ -47,23 +47,25 @@ def _read(csv_path):
 
 
 def _redraw(df, axes, csv_path):
-    for row in axes:
-        for ax in row:
-            ax.clear()
-    population_plot(df, axes[0, 0])
-    biomass_plot(df, axes[0, 1])
-    trait_plot(df, axes[1, 0], species="sheep")
-    phase_plot(df, axes[1, 1])
+    # axes is a 1-D array (single column, plots stacked vertically).
+    for ax in axes:
+        ax.clear()
+    population_plot(df, axes[0])
+    biomass_plot(df, axes[1])
+    trait_plot(df, axes[2], species="sheep")
+    phase_plot(df, axes[3])
     last = int(df["tick"].iloc[-1])
-    axes[0, 0].figure.suptitle(
-        f"Live monitor: {Path(csv_path).name}  (tick {last})", fontsize=14)
+    axes[0].figure.suptitle(
+        f"Live monitor: {Path(csv_path).name}  (tick {last})", fontsize=12)
 
 
 def monitor(csv_path, interval=1.0):
     matplotlib.use("TkAgg", force=True)
     import matplotlib.pyplot as plt
 
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    # Single column: the four panels stack vertically. Start compact so the sim window
+    # can own most of the screen; the window is resizable if you want to enlarge it.
+    fig, axes = plt.subplots(4, 1, figsize=(5, 8))
     fig.tight_layout(rect=(0, 0, 1, 0.96))
     plt.show(block=False)
 
