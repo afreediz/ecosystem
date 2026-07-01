@@ -57,10 +57,26 @@ GRID_CHANNELS_BY_SPECIES = {
 class EcosystemViewer(arcade.Window):
     scale = 4
 
-    def __init__(self, cfg: Config | None = None, scale: int = 4, steps_per_frame: float = 1.0):
+    def __init__(self, cfg: Config | None = None, scale: int = 4, steps_per_frame: float = 1.0,
+                 log_csv: str | None = None, monitor: bool = False):
         cfg = cfg or Config()
         self.sim = Simulation(cfg)
         self.scale = scale
+
+        # Optional CSV logging + live monitor window. The viewer is still an OBSERVER of
+        # the sim -- it only reads sim state to log it, exactly like the headless run does.
+        # A monitor is spawned as a separate process that tails the CSV (see analysis.monitor).
+        self._logger = None
+        self._monitor = None
+        if monitor and log_csv is None:
+            log_csv = "runs/live.csv"        # the monitor needs a file to tail
+        if log_csv is not None:
+            from analysis.logger import Logger
+            self._logger = Logger(log_csv, self.sim)
+            self._logger.open()              # write the header now
+            if monitor:
+                from analysis.monitor import launch
+                self._monitor = launch(log_csv)
 
         # Full world size in content pixels. The window is capped to fit the display so
         # the whole map is never larger than the screen; the camera zoom (below) handles
@@ -168,6 +184,16 @@ class EcosystemViewer(arcade.Window):
         self._step_accum -= n
         for _ in range(n):
             self.sim.step()
+            if self._logger is not None:
+                self._logger.record()        # records only every log_every ticks
+            # stop once either species dies out -- the predator-prey dynamics are over.
+            # pause (don't close) so the final frame stays on screen for inspection.
+            if self.sim.populations["sheep"] == 0 or self.sim.populations["fox"] == 0:
+                self.paused = True
+                if self._logger is not None:
+                    self._logger.close()     # flush the final ticks to disk
+                    self._logger = None
+                break
 
     def _world_to_screen(self, x: np.ndarray, y: np.ndarray):
         sx = x * self.scale
@@ -482,7 +508,16 @@ class EcosystemViewer(arcade.Window):
         elif key == arcade.key.ESCAPE:
             self.close()
 
+    def on_close(self):
+        # flush the CSV so the final ticks are on disk; leave the monitor process alone so
+        # its window stays up for inspection after the sim window closes.
+        if self._logger is not None:
+            self._logger.close()
+        super().on_close()
 
-def run(cfg: Config | None = None, scale: int = 4, steps_per_frame: float = 1.0):
-    EcosystemViewer(cfg, scale=scale, steps_per_frame=steps_per_frame)
+
+def run(cfg: Config | None = None, scale: int = 4, steps_per_frame: float = 1.0,
+        log_csv: str | None = None, monitor: bool = False):
+    EcosystemViewer(cfg, scale=scale, steps_per_frame=steps_per_frame,
+                    log_csv=log_csv, monitor=monitor)
     arcade.run()

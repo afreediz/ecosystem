@@ -23,13 +23,19 @@ def main():
     ap.add_argument("--spf", type=float, default=1.0,
                     help="sim steps per rendered frame (fractional ok, e.g. 0.25 = "
                          "1 step every 4 frames, for slow observation)")
+    ap.add_argument("--log-csv", type=str, default=None,
+                    help="also log the live run to this CSV (default runs/live.csv "
+                         "when --monitor is set)")
+    ap.add_argument("--monitor", action="store_true",
+                    help="open a separate live window that plots the CSV as it is written")
     args = ap.parse_args()
 
     cfg = make_config(world_seed=args.world_seed, seed=args.seed)
     # import arcade lazily so headless environments without a display can still import
     # the sim package without pulling in OpenGL.
     from render.viewer import run
-    run(cfg, scale=args.scale, steps_per_frame=args.spf)
+    run(cfg, scale=args.scale, steps_per_frame=args.spf,
+        log_csv=args.log_csv, monitor=args.monitor)
 
 
 if __name__ == "__main__":
