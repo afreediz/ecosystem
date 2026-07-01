@@ -27,7 +27,7 @@ from sim import genome as gn
 
 
 class Simulation:
-    def __init__(self, cfg: Config | None = None):
+    def __init__(self, cfg: Config | None = None, brain=None):
         self.cfg = cfg or Config()
         # run RNG: drives all stochastic dynamics; resolves a random seed if none was set
         self.rng = self.cfg.make_rng()
@@ -53,7 +53,13 @@ class Simulation:
         }
 
         self.perception = Perception(self.cfg, self.world, self.entities, self.grid, self.env)
-        self.brain = RuleBrain(self.rng, self.cfg.sim.food_eat_threshold)
+        # brain is pluggable: default is the hardcoded RuleBrain, but any object honouring the
+        # Brain contract (e.g. sim.neural_brain.NeuralBrain) can be injected. A brain that
+        # keeps per-agent memory (the neural brain's LSTM) is given a handle on the entity
+        # store via bind(), so it can reset an agent's memory when its slot is recycled.
+        self.brain = brain if brain is not None else RuleBrain(self.rng, self.cfg.sim.food_eat_threshold)
+        if hasattr(self.brain, "bind"):
+            self.brain.bind(self.entities)
         self.brain_system = BrainSystem(self.brain)
 
         self.tick = 0

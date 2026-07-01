@@ -58,9 +58,11 @@ class EcosystemViewer(arcade.Window):
     scale = 4
 
     def __init__(self, cfg: Config | None = None, scale: int = 4, steps_per_frame: float = 1.0,
-                 log_csv: str | None = None, monitor: bool = False):
+                 log_csv: str | None = None, monitor: bool = False, brain=None):
         cfg = cfg or Config()
-        self.sim = Simulation(cfg)
+        # brain is pluggable (rule brain by default, or a trained NeuralBrain passed in); the
+        # viewer stays an OBSERVER and never constructs the brain itself.
+        self.sim = Simulation(cfg, brain=brain)
         self.scale = scale
 
         # Optional CSV logging + live monitor window. The viewer is still an OBSERVER of
@@ -519,7 +521,7 @@ class EcosystemViewer(arcade.Window):
 
 
 def run(cfg: Config | None = None, scale: int = 4, steps_per_frame: float = 1.0,
-        log_csv: str | None = None, monitor: bool = False):
+        log_csv: str | None = None, monitor: bool = False, brain=None):
     EcosystemViewer(cfg, scale=scale, steps_per_frame=steps_per_frame,
-                    log_csv=log_csv, monitor=monitor)
+                    log_csv=log_csv, monitor=monitor, brain=brain)
     arcade.run()

@@ -20,16 +20,40 @@ from analysis.logger import Logger
 from analysis.monitor import launch as _launch_monitor
 
 
+def _make_brain(kind: str, weights: str | None, cfg, device: str = "cpu"):
+    """Build the requested brain. ``rule`` -> the hardcoded RuleBrain (default, handled by
+    Simulation itself); ``neural`` -> a NeuralBrain in eval mode, optionally with weights."""
+    if kind == "rule":
+        return None
+    if kind == "neural":
+        # imported lazily so the headless rule path never needs torch installed
+        import torch
+        from sim.neural_brain import NeuralBrain
+        # size the brain to the checkpoint's hidden dim so weights load regardless of default
+        hidden = 128
+        if weights:
+            blob = torch.load(weights, map_location=device)
+            hidden = int(blob.get("hidden", hidden))
+        brain = NeuralBrain(cfg, device=device, hidden=hidden, training=False)
+        if weights:
+            brain.load(weights)
+        brain.eval()
+        return brain
+    raise ValueError(f"unknown brain {kind!r} (expected 'rule' or 'neural')")
+
+
 def run_experiment(ticks: int, out: str, world_seed: int | None = 12345,
                    seed: int | None = None, log_every: int | None = None,
                    progress_every: int = 2000, quiet: bool = False,
-                   monitor: bool = False):
+                   monitor: bool = False, brain: str = "rule",
+                   weights: str | None = None, device: str = "cpu"):
     cfg = make_config(world_seed=world_seed, seed=seed)
     if log_every is not None:
         cfg.sim.log_every = log_every
-    sim = Simulation(cfg)   # make_rng resolves + records the run seed (random if unset)
+    brain_obj = _make_brain(brain, weights, cfg, device)
+    sim = Simulation(cfg, brain=brain_obj)   # make_rng resolves + records the run seed
     if not quiet:
-        print(f"world_seed={cfg.world.seed}  run_seed={sim.cfg.seed}")
+        print(f"world_seed={cfg.world.seed}  run_seed={sim.cfg.seed}  brain={brain}")
     logger = Logger(out, sim)
     logger.open()   # writes the header now, so the monitor has a file to tail
     mon_proc = _launch_monitor(out) if monitor else None
@@ -78,11 +102,17 @@ def main():
     ap.add_argument("--plot", action="store_true", help="render a PNG report after the run")
     ap.add_argument("--monitor", action="store_true",
                     help="open a separate live window that plots the CSV as it is written")
+    ap.add_argument("--brain", choices=("rule", "neural"), default="rule",
+                    help="which brain drives the animals (default: the hardcoded rule brain)")
+    ap.add_argument("--weights", type=str, default=None,
+                    help="path to trained neural-brain weights (.pt); used with --brain neural")
+    ap.add_argument("--device", type=str, default="cpu", help="torch device for --brain neural")
     args = ap.parse_args()
 
     sim, out = run_experiment(args.ticks, args.out, world_seed=args.world_seed,
                               seed=args.seed, log_every=args.log_every,
-                              monitor=args.monitor)
+                              monitor=args.monitor, brain=args.brain,
+                              weights=args.weights, device=args.device)
 
     if args.plot:
         from analysis.plots import make_report

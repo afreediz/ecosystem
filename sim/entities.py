@@ -39,6 +39,13 @@ class Entities:
         self.species = np.full(cap, -1, dtype=np.int8)
         self.genome = np.zeros((cap, gn.N_GENES), dtype=np.float32)
         self.repro_cooldown = np.zeros(cap, dtype=np.float32)
+        # Monotonic per-animal identity token. A slot is recycled by the free list, so its
+        # index alone cannot tell one animal from the next occupant. ``birth_id`` gets a fresh
+        # unique value on every spawn, so anything that keeps per-agent state across ticks
+        # (e.g. a neural brain's LSTM memory) can detect "this slot now holds a DIFFERENT
+        # animal" by a changed id and reset. 0 == a slot that never held an animal. This is
+        # bookkeeping only -- it draws no RNG, so it does not affect run determinism.
+        self.birth_id = np.zeros(cap, dtype=np.int64)
         # cosmetic countdown (ticks): >0 means "recently bred" -> viewer tints it rose.
         # Never read by any decision/system, so it cannot affect determinism.
         self.mating_glow = np.zeros(cap, dtype=np.float32)
@@ -50,6 +57,9 @@ class Entities:
 
         # free list of available slots (stack; pop from the end)
         self._free = list(range(cap - 1, -1, -1))
+        # next identity token to hand out (see ``birth_id`` above); starts at 1 so 0 stays
+        # reserved for "never spawned".
+        self._next_birth_id = 1
 
     # ------------------------------------------------------------------ helpers
     @property
@@ -101,6 +111,10 @@ class Entities:
         self.sex[slots_k] = rng.integers(0, 2, size=k).astype(np.int8)
         self.species[slots_k] = spec.species_id
         self.genome[slots_k] = genomes[:k]
+        # stamp each new animal with a unique identity token (see ``birth_id``)
+        self.birth_id[slots_k] = np.arange(self._next_birth_id, self._next_birth_id + k,
+                                           dtype=np.int64)
+        self._next_birth_id += k
         self.repro_cooldown[slots_k] = 0.0
         self.mating_glow[slots_k] = 0.0    # recycled slots must not inherit a stale glow
         self.asleep[slots_k] = False       # newborns / recycled slots start awake
