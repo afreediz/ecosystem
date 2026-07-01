@@ -12,7 +12,7 @@ from __future__ import annotations
 import numpy as np
 
 from sim import genome as gn
-from sim.brain import A_DX, A_DY
+from sim.brain import A_DX, A_DY, A_SPEED
 
 _MAX_TURN = 0.7   # radians an agent can rotate toward its desired heading per tick
 
@@ -57,7 +57,10 @@ def apply(cfg, world, ent, idx, act, rng):
     # terrain cost: steeper / higher elevation slows movement
     elev = world.sample(world.elevation, px, py)
     terrain_factor = np.clip(1.0 - 0.5 * elev, 0.3, 1.0)
-    move = speed * terrain_factor * dt
+    # locomotion throttle from the brain (0 = hold position, 1 = full speed). Metabolism
+    # charges the move cost in proportion, so easing off genuinely conserves energy.
+    throttle = np.clip(act[:, A_SPEED], 0.0, 1.0)
+    move = speed * terrain_factor * throttle * dt
     # sleeping animals hold their position (the sleep system already cleared their gates)
     move = np.where(ent.asleep[idx], 0.0, move)
 
