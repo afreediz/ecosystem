@@ -39,7 +39,9 @@ python run_live.py --world-seed 12345 --seed 7 --scale 5 --spf 4
 
 CLI flags: `--world-seed N` (terrain/rivers; same world-seed ⇒ identical map) · `--seed N`
 (run dynamics; omit for a random run on that world) · `--scale N` (pixels per world cell) ·
-`--spf N` (sim steps per rendered frame; fractional ok, e.g. `0.25` = 1 step every 4 frames).
+`--spf N` (sim steps per rendered frame; fractional ok, e.g. `0.25` = 1 step every 4 frames) ·
+`--log-csv PATH` (also log this live run to a CSV) · `--monitor` (open a separate live analysis
+window — see [Live monitor](#live-monitor); defaults `--log-csv` to `runs/live.csv`).
 
 ### Live viewer controls
 
@@ -74,10 +76,12 @@ top-right panel showing its live perception grids (terrain / water / food / thre
 python run_experiment.py --ticks 20000 --world-seed 12345 --seed 7 --out runs/run.csv
 python run_experiment.py --ticks 20000 --world-seed 12345    # random run on a fixed world
 python run_experiment.py --ticks 20000 --plot                # also render a PNG report
+python run_experiment.py --ticks 20000 --monitor             # watch the plots update live
 ```
 
 `--world-seed` fixes the map; `--seed` fixes the run (omit for a random run — the resolved
-seed is printed at startup so you can replay it).
+seed is printed at startup so you can replay it). `--log-every N` sets how often a CSV row is
+written (default every 10 ticks). `--monitor` opens a separate live analysis window (below).
 
 **Analysis** (population curves, trait drift, phase plot):
 
@@ -89,6 +93,26 @@ Each run produces a 4-panel report — population vs time, vegetation biomass, s
 drift (the evolution signal), and the sheep–fox phase plot (the Lotka–Volterra loop):
 
 ![Sample analysis report](analysis/out/demo_report.png)
+
+### Live monitor
+
+`analysis.monitor` opens a **separate window** (independent of the sim) that tails a run CSV
+and re-draws the same 4-panel report on an interval — so you can watch population curves,
+trait drift and the phase plot evolve while a run is still going.
+
+```bash
+# automatic: launch the monitor alongside a run (spawned as its own process)
+python run_experiment.py --ticks 20000 --world-seed 12345 --seed 7 --monitor
+python run_live.py --world-seed 12345 --seed 7 --monitor
+
+# standalone: point it at ANY run CSV — one still being written, or a finished one
+python -m analysis.monitor runs/run.csv --interval 1.0
+```
+
+`--interval` sets the refresh period in seconds (default `1.0`). The monitor tolerates an
+empty/header-only file, so it can start before the first row is written. It needs a display
+(matplotlib `TkAgg` backend), so it can't run in a headless shell. With `--monitor`, the
+sim window closes independently and the monitor window stays open showing the final data.
 
 ## Architecture (the non-negotiables)
 
@@ -118,7 +142,7 @@ run_experiment.py    headless CSV entry point
 sim/                 headless core (world, hydrology, environment, entities,
                      genome, perception, brain, grid, systems/)
 render/viewer.py     Arcade observer (never mutates the sim)
-analysis/            CSV logger + matplotlib plots
+analysis/            CSV logger + matplotlib plots + live monitor window
 ```
 
 ## Tick order (`Simulation.step`)
