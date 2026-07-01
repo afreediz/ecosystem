@@ -19,7 +19,7 @@ import numpy as np
 
 from config import SHEEP
 from sim import genome as gn
-from sim.brain import A_DX, A_DY, A_EAT, A_DRINK, A_REPRO, nearest_in_channel
+from sim.brain import A_DX, A_DY, A_EAT, A_DRINK, A_REPRO, A_SPEED, nearest_in_channel
 from sim.perception import SH_THREAT, S_SENSORY
 
 # A threat within this fraction of sensory range keeps a sheep awake to flee (mirrors the
@@ -81,16 +81,19 @@ def apply(cfg, world, ent, idx, act, obs_by_species, env) -> int:
         go = seeking & has_cover
         act[:, A_DX] = np.where(go, hx, act[:, A_DX])
         act[:, A_DY] = np.where(go, hy, act[:, A_DY])
-        # rushing to bed -- don't stop to forage, drink or mate on the way
+        # rushing to bed -- don't stop to forage, drink or mate on the way, and travel at
+        # full speed (override the brain's feed-in-place stop so they actually reach cover)
         act[seeking, A_EAT] = 0.0
         act[seeking, A_DRINK] = 0.0
         act[seeking, A_REPRO] = 0.0
+        act[seeking, A_SPEED] = 1.0
 
     # --- sleepers take no action; movement reads ent.asleep to hold their position ---
     if asleep.any():
         act[asleep, A_EAT] = 0.0
         act[asleep, A_DRINK] = 0.0
         act[asleep, A_REPRO] = 0.0
+        act[asleep, A_SPEED] = 0.0
 
     ent.asleep[idx] = asleep
     return int(asleep.sum())

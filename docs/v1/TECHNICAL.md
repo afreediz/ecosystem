@@ -393,11 +393,13 @@ memory meaningful (OVERVIEW §8) — any code that "peeked" globally would quiet
 
 ## 11. `sim/brain.py` — the decision contract
 
-The spine. `ACT_DIM = 5`, action indices `A_DX, A_DY, A_EAT, A_DRINK, A_REPRO`.
+The spine. `ACT_DIM = 6`, action indices `A_DX, A_DY, A_EAT, A_DRINK, A_REPRO, A_SPEED`.
+`A_SPEED` is a locomotion throttle in `[0,1]` (0 = hold, 1 = full `max_speed`): `movement`
+scales the step by it and `metabolism` charges the locomotion burn in proportion.
 
 ```python
 class Brain:
-    def decide(self, obs_by_species, idx) -> np.ndarray:   # -> (len(idx), 5)
+    def decide(self, obs_by_species, idx) -> np.ndarray:   # -> (len(idx), 6)
         raise NotImplementedError
 
 class RuleBrain(Brain):
@@ -412,13 +414,16 @@ class RuleBrain(Brain):
   `value − 0.02·dist` over cells above `thr` — the richest grass patch in sight (faithful to
   the old "best grass within sensory_range" rule). Both use a cached flat `_stencil(K)`.
 
-`RuleBrain.decide` allocates the global `(len(idx), 5)` act, draws the explore-heading angles
+`RuleBrain.decide` allocates the global `(len(idx), 6)` act, draws the explore-heading angles
 **once over the global ordering**, then for each species calls `_decide_species` on its
 `Observation` slice and scatters the result back via `np.searchsorted(idx, obs.idx)` (so
 partitioning perception by species can't change the random stream). `_decide_species` decodes
 that species' channels (sheep: `best_in_channel` food + `nearest_in_channel` water/mate/
 threat; fox: nearest prey/water/mate, no threat), then overlays — in increasing priority —
-reproduce, needs, and flee with `np.where` masks. Gate constants at module top: `_ADJ_NORM`
+reproduce, needs, and flee with `np.where` masks. Finally it sets `A_SPEED`: `0.0` for a
+**content** animal holding on an adjacent resource (`(eat|drink|repro) & ~urgent`), else
+`1.0` — so travellers, urgent foragers and fleers all sprint and only settled feeders stop
+(keeping the fragile chase balance intact). Gate constants at module top: `_ADJ_NORM`
 (0.25), `_NEED_URGENCY` (0.4), `_FLEE_TRIGGER` (0.45), `_DEFAULT_FOOD_THR` (0.15, overridden
 by `cfg.sim.food_eat_threshold`). See OVERVIEW §9.
 
@@ -444,7 +449,9 @@ now. `decide` is never a per-entity method.
 `apply(cfg, world, ent, idx, act, obs_by_species, env) -> n_asleep`. Computes each animal's
 personal night window (`sleep_onset + chronotype`, shared duration), classifies it as seeking
 shelter / asleep / awake, steers seekers toward `world.cover_nearest_*`, zeroes the eat/
-drink/repro gates for resting animals, and sets `ent.asleep`. A close predator overrides
+drink/repro gates for resting animals, and sets `ent.asleep`. It also overrides `A_SPEED`:
+seekers get `1.0` (sprint to cover, ignoring any feed-in-place stop) and sleepers `0.0`. A
+close predator overrides
 sleep: it decodes the sheep observation's threat channel the same way the brain does
 (`nearest_in_channel(sheep_obs.grids[:, SH_THREAT])`, distance as a fraction of `S_SENSORY`)
 and scatters the wake flag back into the global ordering via `searchsorted` (foxes carry no
@@ -456,9 +463,10 @@ threat channel, so they never wake to flee). Runs **before movement** so its gat
 rotates the current heading toward the brain's desired heading by at most `_MAX_TURN`, which
 is **where exploration momentum lives** — the stateless brain emits a fresh random heading
 each tick and the turn limit smooths it into a directed wander. Speed = `max_speed` with a
-slight size penalty, scaled by a terrain factor (`1 − 0.5·elevation`, clamped). Sleepers
-don't move. Moves into impassable cells (water / high mountain) are rejected and the heading
-reflected so they wander off the wall.
+slight size penalty, scaled by a terrain factor (`1 − 0.5·elevation`, clamped) **and by the
+brain's `A_SPEED` throttle** (`0` = hold, `1` = full), so a settled feeder covers no ground.
+Sleepers don't move. Moves into impassable cells (water / high mountain) are rejected and the
+heading reflected so they wander off the wall.
 
 ### 12.4 `consumption.py`
 `apply(cfg, world, ent, idx, act, veg, species_grids, rng) -> (killed, n_drink, n_graze,
@@ -472,9 +480,11 @@ n_pred)`. Three blocks, each gated by the brain and re-checked against the world
   killed immediately. Returns the killed slots so the caller drops them from the tick.
 
 ### 12.5 `metabolism.py`
-`apply(cfg, world, ent, idx, temp_field, env, rng) -> causes`. Fully vectorized across both
-species (per-species rates broadcast via `np.where(spec==FOX, ...)`). Burns energy (reduced
-for sleepers), accrues hunger and heat-scaled thirst (slower for sleepers), drains energy/
+`apply(cfg, world, ent, idx, act, temp_field, env, rng) -> causes`. Fully vectorized across
+both species (per-species rates broadcast via `np.where(spec==FOX, ...)`). Burns energy —
+basal `base_burn` plus locomotion `move_cost · A_SPEED · max_speed · size` (so the throttle
+that slows a settled feeder also cuts its energy cost), reduced to basal only for sleepers —
+accrues hunger and heat-scaled thirst (slower for sleepers), drains energy/
 health under high hunger/thirst, recovers health when well-fed, ages, decrements cooldowns.
 Deaths: energy≤0, thirst≥1.5, health≤0, or age (rising probability past 90% of `max_age`,
 certain at `max_age`). Returns a death-cause tally with a fixed priority
@@ -602,7 +612,7 @@ The architecture's payoff. To add a neural brain:
 1. Implement `class TorchBrain(Brain)` with `decide(obs_by_species, idx) -> np.ndarray` (or a
    torch tensor bridged to numpy). It consumes each species' `Observation.grids`
    `(N, C, K, K)` directly as CNN channel-stacks (the rule brain only decodes them because it
-   can't convolve) plus the `(N, 10)` scalars, and returns the `(len(idx), 5)` act.
+   can't convolve) plus the `(N, 10)` scalars, and returns the `(len(idx), 6)` act.
 2. Construct it in `Simulation.__init__` instead of `RuleBrain` (one line), or make it a
    config switch.
 

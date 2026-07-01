@@ -79,7 +79,7 @@ class SpeciesConfig:
     repro_cooldown: float = 80.0
     litter_size: int = 1
     hunger_rate: float = 0.006          # hunger increase per dt
-    thirst_rate: float = 0.009          # thirst increase per dt (heat-scaled)
+    thirst_rate: float = 0.003          # thirst increase per dt (heat-scaled)
     base_burn: float = 0.004            # energy burn per dt at rest
     move_cost: float = 0.020            # extra energy per (speed*size) per dt
     population_cap: int = 1200
@@ -118,7 +118,7 @@ def default_species() -> dict:
     sheep = SpeciesConfig(
         name="sheep", species_id=SHEEP, init_count=240, gene_ranges=sheep_genes,
         maturity_age=110.0, repro_cost=0.25, repro_cooldown=90.0, litter_size=1,
-        hunger_rate=0.0040, thirst_rate=0.0060, base_burn=0.0020, move_cost=0.0045,
+        hunger_rate=0.0040, thirst_rate=0.0020, base_burn=0.0020, move_cost=0.0045,
         population_cap=1400, mutation_rate=0.18, mutation_strength=0.08,
         repro_max_hunger=0.6, repro_max_thirst=0.6, eat_value=0.9,
     )
@@ -132,7 +132,7 @@ def default_species() -> dict:
         # cell-quantization adds small noise to predator pursuit / prey fleeing that tipped
         # the fragile balance to fox extinction (~t3000) on the default seed; the slightly
         # leaner burn gives foxes the endurance to ride it out (verified seeds 12345/7/99).
-        hunger_rate=0.0020, thirst_rate=0.0050, base_burn=0.0010, move_cost=0.0010,
+        hunger_rate=0.0020, thirst_rate=0.0010, base_burn=0.0010, move_cost=0.0010,
         population_cap=430, mutation_rate=0.28, mutation_strength=0.18,
         repro_max_hunger=0.55, repro_max_thirst=0.6, predation_gain=0.72,
         hunt_success=0.5, hunt_halfsat=90.0,
@@ -147,7 +147,7 @@ class SimConfig:
     max_entities: int = 4000
     log_every: int = 10
     # gene order is fixed across the codebase; see genome.py
-    veg_regrow_rate: float = 0.010      # vegetation growth toward carrying capacity per dt
+    veg_regrow_rate: float = 0.002      # vegetation growth toward carrying capacity per dt
     veg_graze_amount: float = 0.8       # fraction of a cell's veg a sheep takes per bite
     eat_radius: float = 1.6             # adjacency distance for eat/drink/attack
     repro_radius: float = 2.0           # adjacency distance for mating

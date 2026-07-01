@@ -38,7 +38,7 @@ These decisions shape everything else and exist to protect the long-term (neural
 2. **The brain↔world contract is the spine.** Every decision flows through
    `decide(obs_by_species, idx) → act`. Each species gets its own `Observation` — egocentric
    perception **grids** `(N, C, K, K)` (CNN-channel-ready) plus a small scalar vector
-   `(N, 10)` — and the brain returns the `(len(idx), 5)` action matrix aligned to the
+   `(N, 10)` — and the brain returns the `(len(idx), 6)` action matrix aligned to the
    **global** alive ordering `idx`. The brain sees **only** the observations — no hidden world
    access. This is the seam a neural network slots into (see §8).
 
@@ -564,26 +564,39 @@ That's why the stateless brain needs no hidden world access.
 
 ### What the brain outputs
 
-For a batch of `N` agents the brain returns an `(N, 5)` action matrix — one row per agent,
-columns `[A_DX, A_DY, A_EAT, A_DRINK, A_REPRO]`. Two real rows from the run above:
+For a batch of `N` agents the brain returns an `(N, 6)` action matrix — one row per agent,
+columns `[A_DX, A_DY, A_EAT, A_DRINK, A_REPRO, A_SPEED]`. Three real rows pulled live from a
+run (`t = 600`, seed 12345/7):
 
 ```
-[ 0.00, -1.00,  1.0, 1.0, 1.0 ]   # heading straight "up"; eat + drink + reproduce all gated
-[ 0.83,  0.56,  1.0, 0.0, 0.0 ]   # heading up-right; eat gated, no drink, no reproduce
+[-1.00,  0.00,  1.0, 0.0, 1.0, 0.0 ]   # heading "left"; eat + reproduce gated; throttle 0 → held still
+[ 0.99,  0.14,  0.0, 0.0, 0.0, 1.0 ]   # heading right; no gates; throttle 1 → wandering at full speed
+[-0.45, -0.89,  1.0, 0.0, 0.0, 1.0 ]   # heading up-left; eat gated but hungry → still sprinting
 ```
 
 - **`A_DX, A_DY`** are a unit heading vector (the movement system smooths it via a turn-rate
-  limit into momentum-carrying motion). The first agent points straight along −y toward its
-  adjacent mate; the second wanders/forages along a diagonal.
-- **`A_EAT, A_DRINK, A_REPRO`** are gates in `[0,1]` (here either `1.0` or `0.0`). The first
-  agent is adjacent to grass, water *and* a mate, so it raises all three; the second only
-  raises eat.
+  limit into momentum-carrying motion). Row 1 points along −x toward an adjacent mate/grass;
+  row 2 wanders along a diagonal; row 3 travels up-left toward better forage.
+- **`A_EAT, A_DRINK, A_REPRO`** are gates in `[0,1]` (here `1.0` or `0.0`). Row 1 sits adjacent
+  to grass *and* a mate, so it raises eat + reproduce; rows 2–3 raise at most eat.
+- **`A_SPEED`** is a locomotion **throttle** in `[0,1]`: `0` = hold position, `1` = full
+  `max_speed`. The movement system scales the step by it and metabolism charges the
+  locomotion energy in proportion, so easing off genuinely conserves energy. The rule brain
+  sets it by behaviour: a **content** animal that has *arrived* at a resource (row 1 — a
+  raised gate means the target reads adjacent, and no urgent need is pulling it elsewhere)
+  **stops** to feed/court instead of running past; everything travelling — explore (row 2),
+  fleeing, or an **urgent** forager crossing a cell on the way to better forage (row 3, hungry
+  and eating but still at full speed) — sprints at `1.0`. Night sleepers are throttled to `0`
+  by the sleep system. So the fragile predator–prey chase balance is untouched (a fleeing
+  sheep and a hunting fox both sprint); the throttle only removes wasted motion once an animal
+  has settled. This is also the first *evolvable* speed/energy tradeoff a future neural brain
+  can learn (§15).
 
-Remember these are **proposals**: a raised gate just means "a target read close enough"
+Remember the gates are **proposals**: a raised gate just means "a target read close enough"
 (within 25% of sensory range). The consumption/reproduction systems still re-check true world
 adjacency and eligibility, so raising `A_REPRO` doesn't guarantee a birth. A future neural
-brain would emit the same five numbers, but with *continuous* gate values that the systems
-threshold at `> 0.5`.
+brain would emit the same six numbers, but with *continuous* gate/throttle values that the
+systems threshold at `> 0.5` (gates) or use directly (`A_SPEED`).
 
 ---
 
@@ -616,7 +629,7 @@ load-bearing (e.g. sleep gates the action matrix before movement reads it):
 1.  environment.update      — advance clock; recompute season/weather/temperature offsets
 2.  grid.rebuild            — spatial hashes (global + per-species) from current positions
 3.  perception.build        — per-species observations (grids + scalars) + global idx
-4.  brain_system.decide     — the (len(idx),5) action matrix, aligned to the global idx
+4.  brain_system.decide     — the (len(idx),6) action matrix, aligned to the global idx
 5.  sleep.apply             — night sleepers steer to cover / bed down; gate their actions
 6.  movement.apply          — headings → positions; terrain cost; water blocks
 7.  consumption.apply       — graze / predation / drink (kills prey immediately)

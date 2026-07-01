@@ -21,8 +21,13 @@ in behind the same contract with no sim rewrite.
 - **Brain↔world contract is the spine.** All decisions go through
   `Brain.decide(obs_by_species, idx) -> act` where `obs_by_species` maps each species to its
   `Observation` (egocentric perception **grids** + a scalar vector) and `act` is the batched
-  `(len(idx), ACT_DIM=5)` action matrix aligned to the **global** alive ordering `idx`
-  (`sim/perception.py` defines obs, `sim/brain.py` defines act). The brain sees ONLY the
+  `(len(idx), ACT_DIM=6)` action matrix aligned to the **global** alive ordering `idx`
+  (`sim/perception.py` defines obs, `sim/brain.py` defines act). Action columns:
+  `A_DX, A_DY` (unit heading), `A_EAT, A_DRINK, A_REPRO` (gates in [0,1]), `A_SPEED`
+  (locomotion throttle in [0,1]: 0=hold, 1=full max_speed — `movement` scales the step by it
+  and `metabolism` charges locomotion burn in proportion; the RuleBrain stops a *content*
+  feeder-in-place and sprints everything else, so travellers/fleers/hunters are unaffected and
+  the fragile chase balance is untouched). The brain sees ONLY the
   observations — no hidden state. Perception is **per-species**: each carries only the
   channels it uses, so a future per-species CNN has no dead inputs. `obs.grids` is
   `(N, C, K, K)` egocentric channels centred on each agent, with `K = 2*R+1` and

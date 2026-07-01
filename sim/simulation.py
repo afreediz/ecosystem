@@ -174,8 +174,9 @@ class Simulation:
             idx = idx[alive_mask]
             act = act[alive_mask]
 
-        # 9. metabolism (energy/hunger/thirst/health/aging/death; sleepers burn less)
-        causes = metabolism.apply(self.cfg, world, ent, idx, temp_field, self.env, self.rng)
+        # 9. metabolism (energy/hunger/thirst/health/aging/death; sleepers burn less,
+        #    and locomotion cost scales with the throttle the brain used -- see A_SPEED)
+        causes = metabolism.apply(self.cfg, world, ent, idx, act, temp_field, self.env, self.rng)
 
         # drop dead from the working set before reproduction
         alive_mask = ent.alive[idx]

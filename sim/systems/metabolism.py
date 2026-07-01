@@ -9,9 +9,10 @@ import numpy as np
 
 from config import SHEEP, FOX
 from sim import genome as gn
+from sim.brain import A_SPEED
 
 
-def apply(cfg, world, ent, idx, temp_field, env, rng):
+def apply(cfg, world, ent, idx, act, temp_field, env, rng):
     causes = {"starve": 0, "thirst": 0, "age": 0, "health": 0}
     if idx.shape[0] == 0:
         return causes
@@ -34,9 +35,12 @@ def apply(cfg, world, ent, idx, temp_field, env, rng):
     thirst_rate = np.where(spec == FOX, cfg.species[FOX].thirst_rate,
                            cfg.species[SHEEP].thirst_rate).astype(np.float32)
 
-    # sleepers rest: only a reduced basal burn (no locomotion cost) and needs accrue slower
+    # sleepers rest: only a reduced basal burn (no locomotion cost) and needs accrue slower.
+    # locomotion cost scales with the throttle the brain actually used this tick (0 = stood
+    # still, 1 = full speed), so an animal that eased off to feed pays less than a sprinter.
     asleep = ent.asleep[idx]
-    awake_burn = base_burn + move_cost * max_speed * size
+    throttle = np.clip(act[:, A_SPEED], 0.0, 1.0)
+    awake_burn = base_burn + move_cost * throttle * max_speed * size
     rest_burn = base_burn * cfg.env.sleep_burn_factor
     burn = np.where(asleep, rest_burn, awake_burn) * metab * dt
     ent.energy[idx] = ent.energy[idx] - burn

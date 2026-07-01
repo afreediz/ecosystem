@@ -32,10 +32,15 @@ from sim.perception import (
     S_HUNGER, S_THIRST, S_ENERGY, S_SENSORY,
 )
 
-ACT_DIM = 5
+ACT_DIM = 6
 
 # action indices
-A_DX, A_DY, A_EAT, A_DRINK, A_REPRO = range(ACT_DIM)
+A_DX, A_DY, A_EAT, A_DRINK, A_REPRO, A_SPEED = range(ACT_DIM)
+# A_SPEED is a locomotion throttle in [0,1]: 0 = hold position, 1 = full max_speed. The
+# movement system scales the step by it and metabolism charges locomotion energy in
+# proportion, so slowing down genuinely conserves energy (a real, evolvable tradeoff for a
+# future neural brain). The rule brain sprints (1.0) while travelling/fleeing and stops
+# (0.0) while feeding/drinking/mating in place.
 
 # how close (as a fraction of sensory_range) a target must read before the brain raises
 # the eat/drink/reproduce gate. The relevant system re-checks true world adjacency.
@@ -231,6 +236,18 @@ class RuleBrain(Brain):
         act[:, A_EAT] = np.where(flee, 0.0, act[:, A_EAT])
         act[:, A_DRINK] = np.where(flee, 0.0, act[:, A_DRINK])
         act[:, A_REPRO] = np.where(flee, 0.0, act[:, A_REPRO])
+
+        # --- throttle: sprint (1.0) while travelling/fleeing, stop (0.0) to feed in place ---
+        # A *content* animal that has arrived at a resource (a raised eat/drink/mate gate ->
+        # the target reads adjacent) holds position to consume/court instead of running past
+        # it, saving the locomotion energy. This only applies when there is NO urgent unmet
+        # need: a hungry/thirsty animal keeps moving at full speed (baseline behaviour) so it
+        # can still reach food/water elsewhere rather than freezing on the first grass cell.
+        # Everything else (explore, pursue a need, approach a mate, flee) travels at full
+        # speed, so the fragile predator-prey chase balance is untouched -- a fleeing sheep
+        # and a hunting fox both sprint. Flee already cleared the gates, so fleers hit 1.0.
+        feeding = (act[:, A_EAT] > 0.5) | (act[:, A_DRINK] > 0.5) | (act[:, A_REPRO] > 0.5)
+        act[:, A_SPEED] = np.where(feeding & ~urgent, 0.0, 1.0).astype(np.float32)
 
         act[:, A_DX] = head_x
         act[:, A_DY] = head_y
