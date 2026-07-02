@@ -96,4 +96,8 @@ def apply(cfg, world, ent, idx, act, obs_by_species, env) -> int:
         act[asleep, A_SPEED] = 0.0
 
     ent.asleep[idx] = asleep
+    # record whose action this tick was overridden by rest (asleep OR steered to cover), so an
+    # RL trainer can exclude those steps from the policy gradient (the emitted action was
+    # discarded). Diagnostic only -- no sim system reads it.
+    ent.action_overridden[idx] = asleep | seeking
     return int(asleep.sum())

@@ -53,6 +53,11 @@ class Entities:
         # Sleepers hold position, suppress eat/drink/mate, and burn energy slowly. Affects
         # the sim (movement/metabolism), so it is real state, not a viewer-only flag.
         self.asleep = np.zeros(cap, dtype=bool)
+        # set True the tick the sleep system OVERRODE this agent's action (asleep OR dashing to
+        # cover): the brain's emitted action was discarded, so it drove no outcome. Pure
+        # diagnostic state -- no system reads it, so it cannot affect dynamics/determinism; the
+        # RL trainer uses it to exclude action-overridden steps from the policy gradient.
+        self.action_overridden = np.zeros(cap, dtype=bool)
         self.alive = np.zeros(cap, dtype=bool)
 
         # free list of available slots (stack; pop from the end)
@@ -118,6 +123,7 @@ class Entities:
         self.repro_cooldown[slots_k] = 0.0
         self.mating_glow[slots_k] = 0.0    # recycled slots must not inherit a stale glow
         self.asleep[slots_k] = False       # newborns / recycled slots start awake
+        self.action_overridden[slots_k] = False
         self.alive[slots_k] = True
         return slots_k
 

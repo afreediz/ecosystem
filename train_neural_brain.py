@@ -251,7 +251,9 @@ class RolloutCollector:
                         # reward, not a separate pain -- add it back so it isn't double-charged
                         d_energy += self.repro_cost[sid]
                     reward, pain = rc.reward_pain(d_energy, d_health, hunger, thirst, bred, False)
-                    controlled = not bool(ent.asleep[slot])   # night/sleep steps aren't trained
+                    # exclude steps whose action the sleep system overrode (asleep OR dashing to
+                    # cover) from the policy gradient -- the emitted action drove no outcome
+                    controlled = not bool(ent.action_overridden[slot])
                     done = False
                 else:
                     reward, pain = rc.reward_pain(0, 0, 0, 0, False, True)
@@ -297,6 +299,12 @@ class RolloutCollector:
         # rollout / episode cut: no next state was recorded, so self-bootstrap V(s_last)
         for key, traj in list(self._open.items()):
             self._finalize(key, traj, bootstrap=float(traj.value[-1]))
+
+    def reset_tracking(self):
+        """Forget which birth_ids are tracked WITHOUT dropping finished sequences. Called on a
+        mid-rollout world rebuild: the new world restarts birth_ids from 1, so stale ids would
+        otherwise linger, never be death-discarded, and fill the max_agents cap."""
+        self._tracked = {SHEEP: set(), FOX: set()}
 
     def reward_pain_stats(self):
         n = max(self.n_signals, 1)
@@ -461,6 +469,7 @@ class PPOTrainer:
             pops["fox"].append(p["fox"])
             if p["sheep"] == 0 or p["fox"] == 0:
                 coll.flush_open()
+                coll.reset_tracking()      # new world restarts birth_ids -> drop stale tracking
                 self._next_episode_seed()
                 sim = rebuild_fn()
                 self._armed = False
