@@ -68,6 +68,36 @@ venv/Scripts/python.exe -m analysis.plots runs/run.csv --out analysis/out
 Use `venv/Scripts/python.exe` (deps live in `./venv`). Live viewer needs an OpenGL display
 and can't run in a headless shell; `run_experiment.py` is the headless path.
 
+## Neural brain (learned, PyTorch) — `sim/neural_brain.py` + `train_neural_brain.py`
+
+A `NeuralBrain` implements the **same `Brain` contract** as `RuleBrain` and is a drop-in
+(inject via `Simulation(cfg, brain=…)`; select with `--brain neural --weights PATH` on
+`run_experiment.py` / `run_live.py`). Per species it is: **CNN** over `obs.grids` → concat
+with an **MLP** over `obs.scalars` (health/hunger/thirst/energy/age/…) → **LSTM** memory →
+actor heads (Gaussian heading, Bernoulli eat/drink/repro gates, Beta speed) + a critic. The
+CNN ends in an adaptive pool so it accepts any window `K`. Torch is imported lazily, so the
+rule-brain path never needs it. **Eval mode acts by the distribution mode → draws zero
+randomness → runs stay reproducible** (verified: same weights+seed ⇒ identical CSV) and do
+not perturb the numpy run-RNG the other systems consume.
+
+Per-agent **LSTM memory** lives in a per-slot table reset when a slot is recycled, detected
+via `entities.birth_id` (a monotonic per-animal id added to the SoA store). The *decision*
+still reads only the observation — `birth_id` is used solely for recurrent-state lifecycle.
+
+Training (`train_neural_brain.py`) is **imitation warm-start → recurrent PPO**:
+- **Reward vs pain** (explicit): reward = survive + energy/health gained + reproduce; pain =
+  hunger + thirst + energy/health lost + death. Net signal = reward − pain.
+- **Warm-start**: a `RecordingRuleBrain` teacher runs the sim; the net clones its actions (BC)
+  and regresses its critic onto the reward−pain returns, so it starts competent.
+- **Sleep consolidation** (default): collect through the day, run the PPO update when the
+  population falls asleep (edge-triggered on the sleeping fraction) — `--fixed-horizon` opts
+  out. Sleep-overridden ticks are masked out of the policy loss.
+- Recurrent PPO uses **stored-hidden replay** (each truncated-BPTT window keeps the LSTM state
+  that entered it), per-agent trajectories keyed by `birth_id`, and a `max_agents` memory cap.
+- **Checkpoints** to `--out` are atomic and resume automatically on the next run (skipping the
+  warm-start). Train: `train_neural_brain.py --iters 200 --out runs/brain.pt`; deploy:
+  `run_experiment.py --brain neural --weights runs/brain.pt --ticks 8000`.
+
 ## Calibration notes (predator–prey is fragile — see v1.md §18)
 
 Getting sheep + foxes to coexist took several stabilizing mechanisms, all realistic.
