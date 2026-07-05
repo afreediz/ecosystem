@@ -48,7 +48,7 @@ def _fractal_noise(gen: OpenSimplex, w: int, h: int, scale: float, octaves: int)
         amp *= 0.5
         freq *= 2.0
     field /= max(total_amp, 1e-9)
-    field = (field - field.min()) / (np.ptp(field) + 1e-9)
+    field = (field - field.min()) / (np.ptp(field) + 1e-9) # normalises to [0, 1]
     return field.astype(np.float32)
 
 
@@ -119,12 +119,11 @@ class World:
         self.passable = ~self.water_any & (self.elevation <= 0.97)
 
         # nearest-freshwater fields for perception (direction + distance to drink)
-        self._build_freshwater_fields()
+        (self.fw_dist, self.fw_nearest_x, self.fw_nearest_y) = self._nearest_source_fields(self.freshwater)
 
         # nearest-cover fields: lets the sleep system steer animals toward the closest safe
         # spot (forest cover) to bed down at night without a per-agent search each tick.
-        (self.cover_dist, self.cover_nearest_x,
-         self.cover_nearest_y) = self._nearest_source_fields(self.cover)
+        (self.cover_dist, self.cover_nearest_x, self.cover_nearest_y) = self._nearest_source_fields(self.cover)
 
     # ------------------------------------------------------------------ biomes
     def _classify_biomes(self) -> np.ndarray:
@@ -193,16 +192,6 @@ class World:
                         dq.append((ny, nx))
         # store nearest as float cell-center coords for direction math
         return dist, (nx_arr.astype(np.float32) + 0.5), (ny_arr.astype(np.float32) + 0.5)
-
-    # ------------------------------------------------------------------ freshwater fields
-    def _build_freshwater_fields(self) -> None:
-        """Nearest-freshwater fields for perception (direction + distance to drink).
-
-        Stored as cell-center coordinates (``fw_nearest_x/y``) and a distance field
-        (``fw_dist`` in cell units; inf where no freshwater is reachable).
-        """
-        self.fw_dist, self.fw_nearest_x, self.fw_nearest_y = \
-            self._nearest_source_fields(self.freshwater)
 
     # ------------------------------------------------------------------ sampling
     def world_to_cell(self, x, y):

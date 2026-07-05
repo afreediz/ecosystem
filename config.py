@@ -22,10 +22,10 @@ class WorldConfig:
     width: int = 208                    # 16:9 (208x117) to match a widescreen display;
     height: int = 117                   # area ~= the old 160x160 so dynamics stay similar
     seed: int = 12345
-    noise_octaves: int = 5
+    noise_octaves: int = 5              # higher number equals more ridges and lower number equals smooth blobby terrain
     noise_scale: float = 0.012          # base frequency for elevation noise
     moisture_scale: float = 0.02
-    sea_level_threshold: float = 0.38   # on normalized elevation [0,1]
+    sea_level_threshold: float = 0.28   # on normalized elevation [0,1]
     n_river_sources: int = 14
     mountain_threshold: float = 0.80
     cold_threshold: float = 0.30        # on normalized temperature [0,1]
@@ -51,8 +51,8 @@ class EnvConfig:
     # Animals rest at night: as dusk falls they head for a safe spot (cover) and sleep,
     # waking near dawn. Onset/wake are the *population mean* times-of-day; each individual
     # is shifted by its heritable ``chronotype`` gene so they don't all drop at once.
-    sleep_onset: float = 0.80           # mean time_of_day when night rest begins (~dusk)
-    sleep_wake: float = 0.26            # mean time_of_day when animals wake (~dawn)
+    sleep_onset: float = 0.90           # 0.80, mean time_of_day when night rest begins (~dusk)
+    sleep_wake: float = 0.10            # 0.26, mean time_of_day when animals wake (~dawn)
     # grace window (fraction of a day) after onset to reach cover before collapsing where
     # they stand -- past this point a straggler sleeps wherever it is (exhaustion).
     sleep_shelter_window: float = 0.06

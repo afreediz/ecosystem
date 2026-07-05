@@ -16,6 +16,7 @@ env/
 
 # ---- Simulation / analysis output ----
 runs/
+tests/
 analysis/out/
 *.csv
 *.png
