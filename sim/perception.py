@@ -87,6 +87,7 @@ class Perception:
         self.ent = entities
         self.env = env
         self.veg = None                       # wired in per-tick by Simulation
+        self.temp_field = None                # wired in per-tick by Simulation
         self._species_grids = {}              # species_id -> SpatialGrid (rebuilt each tick)
 
         # window half-width = ceil(largest sensory_range across all species). One fixed K
@@ -128,7 +129,7 @@ class Perception:
         return buf
 
     # ------------------------------------------------------------------ public
-    def build(self, temp_field: np.ndarray):
+    def build(self):
         """Return (obs_by_species, idx). ``idx`` is the global alive ordering."""
         ent = self.ent
         idx = ent.alive_indices()
@@ -137,10 +138,10 @@ class Perception:
         obs_by_species = {}
         for sid in (SHEEP, FOX):
             sp_idx = idx[species_of_idx == sid]       # sorted subset of the global idx
-            obs_by_species[sid] = self._build_species(sid, sp_idx, temp_field, veg_pad)
+            obs_by_species[sid] = self._build_species(sid, sp_idx, veg_pad)
         return obs_by_species, idx
 
-    def _build_species(self, sid, sp_idx, temp_field, veg_pad) -> Observation:
+    def _build_species(self, sid, sp_idx, veg_pad) -> Observation:
         n = sp_idx.shape[0]
         grids, scalars = self._ensure_buffers(sid, n)
         if n == 0:
@@ -181,7 +182,7 @@ class Perception:
         s[:n, S_HEALTH] = ent.health[sp_idx]
         s[:n, S_AGE] = np.clip(ent.age[sp_idx] / np.maximum(max_age, 1e-6), 0.0, 1.0)
         s[:n, S_SEX] = ent.sex[sp_idx].astype(np.float32)
-        s[:n, S_TEMP] = temp_field[cy, cx]
+        s[:n, S_TEMP] = self.temp_field[cy, cx]
         s[:n, S_TIME] = self.env.time_of_day
         s[:n, S_SEASON] = self.env.season
         s[:n, S_SENSORY] = sens

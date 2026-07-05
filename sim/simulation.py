@@ -147,9 +147,10 @@ class Simulation:
         # wire per-tick context into perception
         self.perception._species_grids = self._species_grids
         self.perception.veg = self.veg
+        self.perception.temp_field = temp_field
 
         # 3. perception -> per-species observations (LOCAL, radius-gated) + global idx
-        obs_by_species, idx = self.perception.build(temp_field)
+        obs_by_species, idx = self.perception.build()
         # keep a handle on this tick's per-species observations so an observer (the live
         # viewer) can inspect a single agent's perception grids. Each Observation carries its
         # own ``idx`` (global slot ids of its rows), captured here BEFORE deaths are filtered
