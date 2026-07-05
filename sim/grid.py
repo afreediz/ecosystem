@@ -27,7 +27,6 @@ class SpatialGrid:
 
     def rebuild(self, indices: np.ndarray, pos_x: np.ndarray, pos_y: np.ndarray) -> None:
         """Index the given entity slots at their positions (sorted into buckets)."""
-        self._indices_raw = indices
         if indices.shape[0] == 0:
             self._indices = np.empty(0, dtype=np.intp)
             self._cell_start = np.zeros(self.nx * self.ny + 1, dtype=np.intp)

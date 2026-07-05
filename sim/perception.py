@@ -81,11 +81,10 @@ class Observation:
 
 
 class Perception:
-    def __init__(self, cfg: Config, world, entities, grid, env):
+    def __init__(self, cfg: Config, world, entities, env):
         self.cfg = cfg
         self.world = world
         self.ent = entities
-        self.grid = grid
         self.env = env
         self.veg = None                       # wired in per-tick by Simulation
         self._species_grids = {}              # species_id -> SpatialGrid (rebuilt each tick)
