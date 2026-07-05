@@ -44,15 +44,14 @@ class Simulation:
         # viewer toggle; defaults off so headless runs are unaffected.
         self.veg_growth_paused = False
 
-        # spatial grids: one global (all animals) + one per species, rebuilt each tick
+        # spatial grids: one per species, rebuilt each tick (all queries are species-scoped)
         cell = self.cfg.sim.grid_cell_size
-        self.grid = SpatialGrid(self.world.w, self.world.h, cell)
         self._species_grids = {
             SHEEP: SpatialGrid(self.world.w, self.world.h, cell),
             FOX: SpatialGrid(self.world.w, self.world.h, cell),
         }
 
-        self.perception = Perception(self.cfg, self.world, self.entities, self.grid, self.env)
+        self.perception = Perception(self.cfg, self.world, self.entities, self.env)
         # brain is pluggable: default is the hardcoded RuleBrain, but any object honouring the
         # Brain contract (e.g. sim.neural_brain.NeuralBrain) can be injected. A brain that
         # keeps per-agent memory (the neural brain's LSTM) is given a handle on the entity
@@ -128,8 +127,6 @@ class Simulation:
 
     def _rebuild_grids(self):
         ent = self.entities
-        alive = ent.alive_indices()
-        self.grid.rebuild(alive, ent.pos_x, ent.pos_y)
         for sid, g in self._species_grids.items():
             sidx = np.nonzero(ent.species_mask(sid))[0]
             g.rebuild(sidx, ent.pos_x, ent.pos_y)
