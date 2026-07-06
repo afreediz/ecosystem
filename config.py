@@ -135,7 +135,7 @@ def default_species() -> dict:
         hunger_rate=0.0020, thirst_rate=0.0010, base_burn=0.0010, move_cost=0.0010,
         population_cap=430, mutation_rate=0.28, mutation_strength=0.18,
         repro_max_hunger=0.55, repro_max_thirst=0.6, predation_gain=0.72,
-        hunt_success=0.5, hunt_halfsat=90.0,
+        hunt_success=0.7, hunt_halfsat=90.0,
     )
     return {SHEEP: sheep, FOX: fox}
 
