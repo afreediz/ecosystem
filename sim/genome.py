@@ -11,6 +11,7 @@ import numpy as np
 
 from config import SHEEP, FOX, SpeciesConfig
 
+# In future, make the GENES specific to species
 # Fixed global gene order. Indices here are used across perception/movement/metabolism.
 GENE_NAMES = [
     "max_speed",
