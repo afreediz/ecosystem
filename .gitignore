@@ -22,6 +22,8 @@ analysis/out/
 *.png
 *.mp4
 *.gif
+*.temp.*
+temp.*
 
 # ---- Tooling / caches ----
 .pytest_cache/
