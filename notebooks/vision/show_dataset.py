@@ -27,7 +27,7 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, PillowWriter
 
 _here = Path(__file__).resolve().parent
-DATA_PATH = _here / "fox_vision_dataset.csv"
+DATA_PATH = _here / "fox" / "fox_vision_dataset.csv"
 
 
 def main():
