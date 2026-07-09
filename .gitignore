@@ -23,6 +23,7 @@ analysis/out/
 *.mp4
 *.temp.*
 temp.*
+*.pth
 
 # ---- Tooling / caches ----
 .pytest_cache/
