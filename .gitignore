@@ -21,7 +21,6 @@ analysis/out/
 *.csv
 *.png
 *.mp4
-*.gif
 *.temp.*
 temp.*
 
