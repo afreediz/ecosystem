@@ -10,6 +10,7 @@ Controls:
   0            reset view (fit map)    middle-drag pan
   V            toggle veg overlay      Ctrl+V      freeze/unfreeze veg regrowth
   S            fast-forward season     Ctrl+S      pause/resume season
+  Ctrl+N       freeze/unfreeze day-night cycle
   Shift+S      spawn sheep at cursor   Shift+F     spawn fox at cursor
   ESC          quit
 """
@@ -297,7 +298,8 @@ class EcosystemViewer(arcade.Window):
             f"   zoom {self.world_camera.zoom / self._fit_zoom():.1f}x",
             f"sheep {s.get('n_sheep', 0)}   fox {s.get('n_fox', 0)}   veg {s.get('veg_biomass', 0):.0f}"
             f"{'  [veg frozen]' if self.sim.veg_growth_paused else ''}",
-            f"{daytime_name(env.time_of_day)} ({env.time_of_day:.2f})   "
+            f"{daytime_name(env.time_of_day)} ({env.time_of_day:.2f})"
+            f"{' FROZEN' if env.day_paused else ''}   "
             f"{season_tag} ({env.season:.2f})   weather {WEATHER_NAMES[env.weather]}",
             f"births {s.get('births', 0)}  deaths {s.get('deaths', 0)} "
             f"(pred {s.get('death_predation', 0)})   asleep {s.get('n_asleep', 0)}",
@@ -504,6 +506,8 @@ class EcosystemViewer(arcade.Window):
                 self.sim.env.advance_season(0.1)         # S: fast-forward the season
         elif key == arcade.key.F and shift:
             self._spawn_at_mouse(FOX)                    # Shift+F: spawn fox at cursor
+        elif key == arcade.key.N and ctrl:
+            self.sim.env.toggle_day_pause()              # Ctrl+N: freeze/unfreeze day-night
         elif key == arcade.key.V:
             if ctrl:
                 self.sim.veg_growth_paused = not self.sim.veg_growth_paused  # Ctrl+V

@@ -805,10 +805,10 @@ def main():
     ap.add_argument("--out", type=str, default="runs/brain.pt")
     ap.add_argument("--world-seed", type=int, default=12345)
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--device", type=str, default="cpu")
+    ap.add_argument("--device", type=str, default="cuda")
     ap.add_argument("--hidden", type=int, default=128)
-    ap.add_argument("--max-seq", type=int, default=64)
-    ap.add_argument("--seq-batch", type=int, default=8)
+    ap.add_argument("--max-seq", type=int, default=128)
+    ap.add_argument("--seq-batch", type=int, default=32)
     ap.add_argument("--max-agents", type=int, default=96,
                     help="max living animals tracked per species (memory bound)")
     ap.add_argument("--lr", type=float, default=3e-4)
