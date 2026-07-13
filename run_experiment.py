@@ -20,40 +20,62 @@ from analysis.logger import Logger
 from analysis.monitor import launch as _launch_monitor
 
 
-def _make_brain(kind: str, weights: str | None, cfg, device: str = "cpu"):
-    """Build the requested brain. ``rule`` -> the hardcoded RuleBrain (default, handled by
-    Simulation itself); ``neural`` -> a NeuralBrain in eval mode, optionally with weights."""
-    if kind == "rule":
-        return None
-    if kind == "neural":
-        # imported lazily so the headless rule path never needs torch installed
-        import torch
+def _load_species_brain(path: str, species_id: int, cfg, device: str = "cpu"):
+    """Load a per-species deployment brain from a checkpoint, auto-detecting its format:
+
+    - a memoryless behavioural-cloning policy (``notebooks/imitation_learning/*.pt``; blob has a
+      ``state_dict`` key) -> a ``sim.policy_brain.PolicyBrain`` for this species;
+    - a recurrent CNN+MLP+LSTM actor-critic (``train_neural_brain.py`` / ``runs/*.pt``; blob has
+      ``sheep`` + ``fox`` keys) -> a ``sim.neural_brain.NeuralBrain`` in eval mode.
+
+    Both are eval/deterministic, so they draw no randomness and keep the run reproducible. Torch
+    is imported lazily here so the rule path never needs it installed.
+    """
+    import torch
+    blob = torch.load(path, map_location=device)
+    if isinstance(blob, dict) and "state_dict" in blob:
+        from sim.policy_brain import policy_brain_from_blob
+        return policy_brain_from_blob(blob, species_id, device=device)
+    if isinstance(blob, dict) and "sheep" in blob and "fox" in blob:
         from sim.neural_brain import NeuralBrain
-        # size the brain to the checkpoint's hidden dim so weights load regardless of default
-        hidden = 128
-        if weights:
-            blob = torch.load(weights, map_location=device)
-            hidden = int(blob.get("hidden", hidden))
+        hidden = int(blob.get("hidden", 128))
         brain = NeuralBrain(cfg, device=device, hidden=hidden, training=False)
-        if weights:
-            brain.load(weights)
+        brain.load(path)
         brain.eval()
         return brain
-    raise ValueError(f"unknown brain {kind!r} (expected 'rule' or 'neural')")
+    raise ValueError(
+        f"unrecognized brain checkpoint {path!r}: expected a memoryless policy (has a "
+        f"'state_dict' key) or a recurrent NeuralBrain (has 'sheep' + 'fox' keys)")
+
+
+def build_brain(sheep_weights: str | None, fox_weights: str | None, cfg, device: str = "cpu"):
+    """Build the per-species brain spec for ``Simulation``.
+
+    A species with a checkpoint path gets a neural brain loaded from it; a species with no path
+    uses the RuleBrain (``Simulation`` fills it in on the run RNG). Returns ``None`` when NEITHER
+    path is set, so ``Simulation`` uses its default rule brain for both species.
+    """
+    if not sheep_weights and not fox_weights:
+        return None
+    return {
+        SHEEP: _load_species_brain(sheep_weights, SHEEP, cfg, device) if sheep_weights else None,
+        FOX: _load_species_brain(fox_weights, FOX, cfg, device) if fox_weights else None,
+    }
 
 
 def run_experiment(ticks: int, out: str, world_seed: int | None = 12345,
                    seed: int | None = None, log_every: int | None = None,
                    progress_every: int = 2000, quiet: bool = False,
-                   monitor: bool = False, brain: str = "rule",
-                   weights: str | None = None, device: str = "cpu"):
+                   monitor: bool = False, sheep_brain: str | None = None,
+                   fox_brain: str | None = None, device: str = "cpu"):
     cfg = make_config(world_seed=world_seed, seed=seed)
     if log_every is not None:
         cfg.sim.log_every = log_every
-    brain_obj = _make_brain(brain, weights, cfg, device)
-    sim = Simulation(cfg, brain=brain_obj)   # make_rng resolves + records the run seed
+    brain_spec = build_brain(sheep_brain, fox_brain, cfg, device)
+    sim = Simulation(cfg, brain=brain_spec)   # make_rng resolves + records the run seed
     if not quiet:
-        print(f"world_seed={cfg.world.seed}  run_seed={sim.cfg.seed}  brain={brain}")
+        print(f"world_seed={cfg.world.seed}  run_seed={sim.cfg.seed}  "
+              f"sheep_brain={sheep_brain or 'rule'}  fox_brain={fox_brain or 'rule'}")
     logger = Logger(out, sim)
     logger.open()   # writes the header now, so the monitor has a file to tail
     mon_proc = _launch_monitor(out) if monitor else None
@@ -102,17 +124,21 @@ def main():
     ap.add_argument("--plot", action="store_true", help="render a PNG report after the run")
     ap.add_argument("--monitor", action="store_true",
                     help="open a separate live window that plots the CSV as it is written")
-    ap.add_argument("--brain", choices=("rule", "neural"), default="rule",
-                    help="which brain drives the animals (default: the hardcoded rule brain)")
-    ap.add_argument("--weights", type=str, default=None,
-                    help="path to trained neural-brain weights (.pt); used with --brain neural")
-    ap.add_argument("--device", type=str, default="cpu", help="torch device for --brain neural")
+    ap.add_argument("--sheep-brain", type=str, default=None,
+                    help="path to a trained sheep-brain checkpoint (.pt), e.g. "
+                         "notebooks/imitation_learning/sheep.pt; omit to drive sheep with the "
+                         "rule brain")
+    ap.add_argument("--fox-brain", type=str, default=None,
+                    help="path to a trained fox-brain checkpoint (.pt); omit to drive foxes "
+                         "with the rule brain")
+    ap.add_argument("--device", type=str, default="cpu",
+                    help="torch device for any neural brain (default cpu)")
     args = ap.parse_args()
 
     sim, out = run_experiment(args.ticks, args.out, world_seed=args.world_seed,
                               seed=args.seed, log_every=args.log_every,
-                              monitor=args.monitor, brain=args.brain,
-                              weights=args.weights, device=args.device)
+                              monitor=args.monitor, sheep_brain=args.sheep_brain,
+                              fox_brain=args.fox_brain, device=args.device)
 
     if args.plot:
         from analysis.plots import make_report

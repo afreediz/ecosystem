@@ -125,6 +125,62 @@ class Brain:
         raise NotImplementedError
 
 
+class CompositeBrain(Brain):
+    """Routes each species to its own ``Brain`` -- e.g. a learned sheep policy alongside a rule
+    fox, or two different neural brains. ``brains`` maps every species id to a concrete Brain.
+
+    Species assigned the SAME brain instance are decided together in ONE ``decide`` call, so if
+    both species share a single RuleBrain the explore-heading RNG stream is drawn exactly as a
+    lone RuleBrain would draw it -- per-species routing never changes an all-rule run. Each
+    sub-brain is called with the full global ``idx`` but only the observations of the species it
+    owns, and writes into just those rows (its ``searchsorted`` into ``idx`` is unaffected by the
+    others' absence), so the merged action matrix is identical to what each brain would emit on
+    its own rows.
+    """
+
+    def __init__(self, brains: dict):
+        self.brains = dict(brains)             # {species_id: Brain}
+
+    def bind(self, entities) -> None:
+        """Forward the entity handle to any sub-brain that keeps per-agent state (e.g. a neural
+        brain's LSTM lifecycle). Each distinct instance is bound once."""
+        seen = set()
+        for b in self.brains.values():
+            if id(b) not in seen:
+                seen.add(id(b))
+                if hasattr(b, "bind"):
+                    b.bind(entities)
+
+    def decide(self, obs_by_species, idx) -> np.ndarray:
+        n_global = idx.shape[0]
+        act = np.zeros((n_global, ACT_DIM), dtype=np.float32)
+        if n_global == 0:
+            return act
+        # group species by the brain instance driving them (preserving species order), so a
+        # shared brain is invoked once over all its species -> identical RNG to a lone brain.
+        groups: dict[int, tuple] = {}
+        order: list[int] = []
+        for sid, brain in self.brains.items():
+            key = id(brain)
+            if key not in groups:
+                groups[key] = (brain, [])
+                order.append(key)
+            groups[key][1].append(sid)
+        for key in order:
+            brain, sids = groups[key]
+            sub_obs = {s: obs_by_species[s] for s in sids if s in obs_by_species}
+            if not sub_obs:
+                continue
+            sub_act = brain.decide(sub_obs, idx)
+            for s in sids:
+                obs = obs_by_species.get(s)
+                if obs is None or obs.grids.shape[0] == 0:
+                    continue
+                pos = np.searchsorted(idx, obs.idx)
+                act[pos] = sub_act[pos]
+        return act
+
+
 def _norm(dx, dy):
     mag = np.sqrt(dx * dx + dy * dy)
     safe = mag > 1e-6

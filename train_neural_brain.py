@@ -55,8 +55,8 @@ Usage:
     venv/Scripts/python.exe train_neural_brain.py --iters 200 --out runs/brain.pt
     venv/Scripts/python.exe train_neural_brain.py --iters 200 --out runs/brain.pt   # resumes
     venv/Scripts/python.exe train_neural_brain.py --iters 50 --bc-iters 0           # skip warm-start
-    # then deploy the trained brain headless:
-    venv/Scripts/python.exe run_experiment.py --brain neural --weights runs/brain.pt --ticks 8000
+    # then deploy the trained brain headless (per species; drive one or both):
+    venv/Scripts/python.exe run_experiment.py --sheep-brain runs/brain.pt --fox-brain runs/brain.pt --ticks 8000
 """
 from __future__ import annotations
 

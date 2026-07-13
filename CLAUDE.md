@@ -70,9 +70,14 @@ and can't run in a headless shell; `run_experiment.py` is the headless path.
 
 ## Neural brain (learned, PyTorch) — `sim/neural_brain.py` + `train_neural_brain.py`
 
-A `NeuralBrain` implements the **same `Brain` contract** as `RuleBrain` and is a drop-in
-(inject via `Simulation(cfg, brain=…)`; select with `--brain neural --weights PATH` on
-`run_experiment.py` / `run_live.py`). Per species it is: **CNN** over `obs.grids` → concat
+A `NeuralBrain` implements the **same `Brain` contract** as `RuleBrain` and is a drop-in.
+Brains are selected **per species** on `run_experiment.py` / `run_live.py` via
+`--sheep-brain PATH` / `--fox-brain PATH` (a species with no path uses the rule brain); each
+flag auto-detects the checkpoint format — a memoryless imitation-learning policy
+(`sim/policy_brain.py`, `notebooks/imitation_learning/*.pt`) or the recurrent `NeuralBrain`
+(`runs/*.pt`). Under the hood these are threaded through a `CompositeBrain` that routes each
+species to its own brain and fills unspecified species with a shared `RuleBrain` on the run
+RNG (so an all-rule run is byte-identical). Per species the `NeuralBrain` is: **CNN** over `obs.grids` → concat
 with an **MLP** over `obs.scalars` (health/hunger/thirst/energy/age/…) → **LSTM** memory →
 actor heads (Gaussian heading, Bernoulli eat/drink/repro gates, Beta speed) + a critic. The
 CNN ends in an adaptive pool so it accepts any window `K`. Torch is imported lazily, so the
@@ -96,7 +101,8 @@ Training (`train_neural_brain.py`) is **imitation warm-start → recurrent PPO**
   that entered it), per-agent trajectories keyed by `birth_id`, and a `max_agents` memory cap.
 - **Checkpoints** to `--out` are atomic and resume automatically on the next run (skipping the
   warm-start). Train: `train_neural_brain.py --iters 200 --out runs/brain.pt`; deploy:
-  `run_experiment.py --brain neural --weights runs/brain.pt --ticks 8000`.
+  `run_experiment.py --sheep-brain runs/brain.pt --fox-brain runs/brain.pt --ticks 8000`
+  (or drive just one species, e.g. `--sheep-brain notebooks/imitation_learning/sheep.pt`).
 
 ## Calibration notes (predator–prey is fragile — see v1.md §18)
 
