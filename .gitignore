@@ -24,6 +24,8 @@ analysis/out/
 *.temp.*
 temp.*
 *.pth
+*.pt
+*.npz
 
 # ---- Tooling / caches ----
 .pytest_cache/
