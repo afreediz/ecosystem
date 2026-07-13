@@ -86,9 +86,15 @@ class Environment:
         self._season_phase = 0.0    # auto-advancing fraction of a year
         self._season_shift = 0.0    # manual forward offset
 
+        # the diurnal clock can likewise be frozen at runtime (live viewer control). With
+        # no manual input this stays False, so ``self.t`` advances exactly as before and a
+        # headless run is byte-for-byte identical to the original t-derived time-of-day.
+        self.day_paused = False
+
     def update(self, dt: float) -> None:
         c = self.cfg
-        self.t += dt
+        if not self.day_paused:
+            self.t += dt
         self.time_of_day = (self.t % c.day_length) / c.day_length
         if not self.season_paused:
             self._season_phase += dt / c.year_length
@@ -118,6 +124,16 @@ class Environment:
         """Freeze/unfreeze seasonal progression (day & weather keep running)."""
         self.season_paused = not self.season_paused
         return self.season_paused
+
+    # ------------------------------------------------------------------ day control
+    def toggle_day_pause(self) -> bool:
+        """Freeze/unfreeze the day-night cycle (time-of-day holds; season & weather run).
+
+        Freezing halts ``self.t`` so ``time_of_day`` stops advancing -- the sun, the night
+        overlay, the diurnal temperature offset and the animals' sleep window all hold at
+        the current moment until unfrozen."""
+        self.day_paused = not self.day_paused
+        return self.day_paused
 
     @property
     def temp_offset(self) -> float:
