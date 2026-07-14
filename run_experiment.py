@@ -20,46 +20,41 @@ from analysis.logger import Logger
 from analysis.monitor import launch as _launch_monitor
 
 
-def _load_species_brain(path: str, species_id: int, cfg, device: str = "cpu"):
-    """Load a per-species deployment brain from a checkpoint, auto-detecting its format:
+def _load_species_brain(path: str, species_id: int, device: str = "cpu"):
+    """Load a per-species deployment brain from an imitation-learning checkpoint.
 
-    - a memoryless behavioural-cloning policy (``notebooks/imitation_learning/*.pt``; blob has a
-      ``state_dict`` key) -> a ``sim.policy_brain.PolicyBrain`` for this species;
-    - a recurrent CNN+MLP+LSTM actor-critic (``train_neural_brain.py`` / ``runs/*.pt``; blob has
-      ``sheep`` + ``fox`` keys) -> a ``sim.neural_brain.NeuralBrain`` in eval mode.
+    The checkpoint is a memoryless behavioural-cloning policy from
+    ``notebooks/imitation_learning/`` (``*.pt`` with a ``state_dict`` key) -> a
+    ``sim.policy_brain.PolicyBrain`` for this species. It runs in eval / deterministic mode, so
+    it draws no randomness and keeps the run reproducible. Torch is imported lazily here so the
+    rule path never needs it installed.
 
-    Both are eval/deterministic, so they draw no randomness and keep the run reproducible. Torch
-    is imported lazily here so the rule path never needs it installed.
+    (The older recurrent CNN+MLP+LSTM ``NeuralBrain`` and its RL trainer are archived under
+    ``backup/`` and no longer deployable -- see ``backup/README.md``.)
     """
     import torch
     blob = torch.load(path, map_location=device)
     if isinstance(blob, dict) and "state_dict" in blob:
         from sim.policy_brain import policy_brain_from_blob
         return policy_brain_from_blob(blob, species_id, device=device)
-    if isinstance(blob, dict) and "sheep" in blob and "fox" in blob:
-        from sim.neural_brain import NeuralBrain
-        hidden = int(blob.get("hidden", 128))
-        brain = NeuralBrain(cfg, device=device, hidden=hidden, training=False)
-        brain.load(path)
-        brain.eval()
-        return brain
     raise ValueError(
-        f"unrecognized brain checkpoint {path!r}: expected a memoryless policy (has a "
-        f"'state_dict' key) or a recurrent NeuralBrain (has 'sheep' + 'fox' keys)")
+        f"unrecognized brain checkpoint {path!r}: expected a memoryless imitation-learning "
+        f"policy (a '.pt' with a 'state_dict' key, e.g. notebooks/imitation_learning/"
+        f"{('sheep' if species_id == SHEEP else 'fox')}.pt)")
 
 
-def build_brain(sheep_weights: str | None, fox_weights: str | None, cfg, device: str = "cpu"):
+def build_brain(sheep_weights: str | None, fox_weights: str | None, device: str = "cpu"):
     """Build the per-species brain spec for ``Simulation``.
 
-    A species with a checkpoint path gets a neural brain loaded from it; a species with no path
+    A species with a checkpoint path gets a learned brain loaded from it; a species with no path
     uses the RuleBrain (``Simulation`` fills it in on the run RNG). Returns ``None`` when NEITHER
     path is set, so ``Simulation`` uses its default rule brain for both species.
     """
     if not sheep_weights and not fox_weights:
         return None
     return {
-        SHEEP: _load_species_brain(sheep_weights, SHEEP, cfg, device) if sheep_weights else None,
-        FOX: _load_species_brain(fox_weights, FOX, cfg, device) if fox_weights else None,
+        SHEEP: _load_species_brain(sheep_weights, SHEEP, device) if sheep_weights else None,
+        FOX: _load_species_brain(fox_weights, FOX, device) if fox_weights else None,
     }
 
 
@@ -71,7 +66,7 @@ def run_experiment(ticks: int, out: str, world_seed: int | None = 12345,
     cfg = make_config(world_seed=world_seed, seed=seed)
     if log_every is not None:
         cfg.sim.log_every = log_every
-    brain_spec = build_brain(sheep_brain, fox_brain, cfg, device)
+    brain_spec = build_brain(sheep_brain, fox_brain, device)
     sim = Simulation(cfg, brain=brain_spec)   # make_rng resolves + records the run seed
     if not quiet:
         print(f"world_seed={cfg.world.seed}  run_seed={sim.cfg.seed}  "

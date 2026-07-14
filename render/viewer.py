@@ -61,8 +61,8 @@ class EcosystemViewer(arcade.Window):
     def __init__(self, cfg: Config | None = None, scale: int = 4, steps_per_frame: float = 1.0,
                  log_csv: str | None = None, monitor: bool = False, brain=None):
         cfg = cfg or Config()
-        # brain is pluggable (rule brain by default, or a trained NeuralBrain passed in); the
-        # viewer stays an OBSERVER and never constructs the brain itself.
+        # brain is pluggable (rule brain by default, or a trained brain / per-species spec
+        # passed in); the viewer stays an OBSERVER and never constructs the brain itself.
         self.sim = Simulation(cfg, brain=brain)
         self.scale = scale
 

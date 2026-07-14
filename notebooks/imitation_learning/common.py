@@ -9,12 +9,12 @@ thin, readable driver:
     train_fox.ipynb    -> same for the fox
     evaluate.ipynb     -> scores the clones and drops them into the real Simulation
 
-WHY NO MEMORY (yet).  The deployed neural brain (``sim/neural_brain.py``) is CNN + MLP +
-**LSTM**.  This first, deliberately simpler pass drops the LSTM: each decision is a pure
-function of the *current* observation, so there is no per-agent recurrent state to carry, no
-``birth_id`` bookkeeping, and every (obs, action) row is an independent training example.
-That makes the dataset a plain shuffled table and the model a feed-forward net -- the clean
-baseline to beat once recurrence is added back.
+WHY NO MEMORY.  These clones are memoryless: each decision is a pure function of the *current*
+observation, so there is no per-agent recurrent state to carry, no ``birth_id`` bookkeeping, and
+every (obs, action) row is an independent training example.  That makes the dataset a plain
+shuffled table and the model a feed-forward net.  The clones deploy through
+``sim.policy_brain.PolicyBrain`` (a fuller CNN+MLP+LSTM recurrent brain and its RL trainer are
+archived under ``backup/``).
 
 THE DATA.  Perception is a stack of egocentric grids ``(C, K, K)`` (K = 57 in the default
 world) plus a ``(10,)`` scalar vector, exactly what ``Brain.decide`` receives.  A 57x57x5
@@ -281,9 +281,10 @@ def build_policy(sid, hidden=128, cnn_feat=128, scalar_feat=32):
     class SpeciesPolicy(nn.Module):
         """Memoryless behavioural-cloning policy: CNN(grids) + MLP(scalars) -> action heads.
 
-        Mirrors the perception front-end of ``sim/neural_brain.SpeciesActorCritic`` (same conv
-        stack + adaptive pool, so it accepts any window K), but replaces the LSTM with a plain
-        feed-forward trunk and drops the critic -- this is supervised imitation, not RL.
+        A CNN over the egocentric grids + MLP over the scalars feed a plain feed-forward trunk
+        (adaptive pool, so it accepts any window K); no LSTM and no critic -- this is supervised
+        imitation, not RL.  Matches ``sim.policy_brain.SpeciesPolicy`` layer-for-layer so a
+        checkpoint saved here loads there for deployment.
         Heads: a 2-D heading mean (regressed), 3 gate logits + 1 speed logit (classified).
         """
 
