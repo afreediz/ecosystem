@@ -821,11 +821,12 @@ def main():
                     help="disable sleep-consolidation; use exactly --horizon ticks per cycle")
     ap.add_argument("--no-resume", action="store_true",
                     help="start fresh even if a checkpoint exists at --out")
-    ap.add_argument("--full-world", action="store_true",
-                    help="train on the full-size world/populations (slower, more memory)")
+    ap.add_argument("--small", action="store_true",
+                    help="train on a shrunken world/populations (faster, less memory); "
+                         "default is the full-size world")
     args = ap.parse_args()
 
-    cfg = build_train_config(args.world_seed, args.seed, small=not args.full_world)
+    cfg = build_train_config(args.world_seed, args.seed, small=args.small)
     ppo = PPOConfig(horizon=args.horizon, hidden=args.hidden, max_seq=args.max_seq,
                     seq_batch=args.seq_batch, max_agents=args.max_agents, lr=args.lr,
                     epochs=args.epochs, bc_iters=args.bc_iters, bc_horizon=args.bc_horizon,
@@ -835,7 +836,7 @@ def main():
     if not args.no_resume:
         trainer.try_resume(args.out)
 
-    print(f"world={'FULL' if args.full_world else 'small'} "
+    print(f"world={'small' if args.small else 'FULL'} "
           f"(K={trainer.sim.perception.K}, hidden={trainer.ppo.hidden}) device={args.device} "
           f"| {'sleep-consolidation' if ppo.night_training else 'fixed-horizon'}")
     trainer.run(args.iters, args.out, save_every=args.save_every)
