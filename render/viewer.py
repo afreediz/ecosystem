@@ -302,9 +302,7 @@ class EcosystemViewer(arcade.Window):
             f"{' FROZEN' if env.day_paused else ''}   "
             f"{season_tag} ({env.season:.2f})   weather {WEATHER_NAMES[env.weather]}",
             f"births {s.get('births', 0)}  deaths {s.get('deaths', 0)} "
-            f"(pred {s.get('death_predation', 0)})   asleep {s.get('n_asleep', 0)}",
-            "male: black dot   mating: rose tint   asleep: dimmed",
-            "left-click an animal to inspect its perception grids",
+            f"(pred {s.get('death_predation', 0)})   asleep {s.get('n_asleep', 0)}"
         ]
         # dark translucent backing so white text stays readable over light terrain
         # (snow / beach / grazed grass) -- without it the HUD "disappears" on bright cells.

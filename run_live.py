@@ -44,6 +44,11 @@ def main():
     args = ap.parse_args()
 
     cfg = make_config(world_seed=args.world_seed, seed=args.seed)
+    # resolve + record the run seed now (mutates cfg.seed in place) so we can report it before
+    # the viewer creates the Simulation; the Simulation reuses the same cfg => identical run.
+    cfg.make_rng()
+    print(f"world_seed={cfg.world.seed}  run_seed={cfg.seed}  "
+          f"sheep_brain={args.sheep_brain or 'rule'}  fox_brain={args.fox_brain or 'rule'}")
     # build the per-species brain spec (None => Simulation uses its default RuleBrain for both);
     # any learned brain is imported lazily inside build_brain so the rule path never needs torch.
     brain = build_brain(args.sheep_brain, args.fox_brain, args.device)
