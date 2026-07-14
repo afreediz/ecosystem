@@ -2,9 +2,10 @@
 
 A drop-in ``Brain`` (``decide(obs_by_species, idx) -> act``) that runs the *memoryless*
 behavioural-cloning policies produced by ``notebooks/imitation_learning/`` (``sheep.pt`` /
-``fox.pt``). Where ``sim/neural_brain.py`` is the full recurrent CNN+MLP+**LSTM** actor-critic,
-this is the simpler feed-forward baseline: each decision is a pure function of the *current*
-observation, so there is no per-agent recurrent state and no ``birth_id`` bookkeeping.
+``fox.pt``). Each decision is a pure function of the *current* observation -- a memoryless
+feed-forward policy, so there is no per-agent recurrent state and no ``birth_id`` bookkeeping.
+(A fuller recurrent CNN+MLP+**LSTM** actor-critic and its RL trainer were archived under
+``backup/`` when deployment moved to these imitation-learning policies.)
 
 The network here mirrors the notebook's ``SpeciesPolicy`` front-end exactly (same conv stack +
 adaptive pool + trunk + heads and the same submodule names), so a checkpoint saved by the
@@ -38,9 +39,9 @@ _A_SPEED = 5
 class SpeciesPolicy(nn.Module):
     """Memoryless behavioural-cloning policy: CNN(grids) + MLP(scalars) -> action heads.
 
-    Mirrors the perception front-end of ``sim.neural_brain.SpeciesActorCritic`` (same conv stack
-    + adaptive pool, so it accepts any window ``K``) but replaces the LSTM with a plain
-    feed-forward trunk and drops the critic. Heads: a 2-D heading mean (regressed), 3 gate logits
+    A CNN over the egocentric grids + MLP over the scalar vector feed a feed-forward trunk (the
+    adaptive pool lets it accept any window ``K``); there is no LSTM and no critic. Heads: a 2-D
+    heading mean (regressed), 3 gate logits
     + 1 speed logit (classified). Layer sizes/names match the notebook so checkpoints load."""
 
     def __init__(self, n_channels: int, hidden: int = 128, cnn_feat: int = 128,

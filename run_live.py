@@ -45,8 +45,8 @@ def main():
 
     cfg = make_config(world_seed=args.world_seed, seed=args.seed)
     # build the per-species brain spec (None => Simulation uses its default RuleBrain for both);
-    # any neural brain is imported lazily inside build_brain so the rule path never needs torch.
-    brain = build_brain(args.sheep_brain, args.fox_brain, cfg, args.device)
+    # any learned brain is imported lazily inside build_brain so the rule path never needs torch.
+    brain = build_brain(args.sheep_brain, args.fox_brain, args.device)
     # import arcade lazily so headless environments without a display can still import
     # the sim package without pulling in OpenGL.
     from render.viewer import run

@@ -68,41 +68,32 @@ venv/Scripts/python.exe -m analysis.plots runs/run.csv --out analysis/out
 Use `venv/Scripts/python.exe` (deps live in `./venv`). Live viewer needs an OpenGL display
 and can't run in a headless shell; `run_experiment.py` is the headless path.
 
-## Neural brain (learned, PyTorch) — `sim/neural_brain.py` + `train_neural_brain.py`
+## Neural brain (learned, PyTorch) — `sim/policy_brain.py`
 
-A `NeuralBrain` implements the **same `Brain` contract** as `RuleBrain` and is a drop-in.
+A `PolicyBrain` implements the **same `Brain` contract** as `RuleBrain` and is a drop-in.
 Brains are selected **per species** on `run_experiment.py` / `run_live.py` via
-`--sheep-brain PATH` / `--fox-brain PATH` (a species with no path uses the rule brain); each
-flag auto-detects the checkpoint format — a memoryless imitation-learning policy
-(`sim/policy_brain.py`, `notebooks/imitation_learning/*.pt`) or the recurrent `NeuralBrain`
-(`runs/*.pt`). Under the hood these are threaded through a `CompositeBrain` that routes each
-species to its own brain and fills unspecified species with a shared `RuleBrain` on the run
-RNG (so an all-rule run is byte-identical). Per species the `NeuralBrain` is: **CNN** over `obs.grids` → concat
-with an **MLP** over `obs.scalars` (health/hunger/thirst/energy/age/…) → **LSTM** memory →
-actor heads (Gaussian heading, Bernoulli eat/drink/repro gates, Beta speed) + a critic. The
-CNN ends in an adaptive pool so it accepts any window `K`. Torch is imported lazily, so the
-rule-brain path never needs it. **Eval mode acts by the distribution mode → draws zero
-randomness → runs stay reproducible** (verified: same weights+seed ⇒ identical CSV) and do
-not perturb the numpy run-RNG the other systems consume.
+`--sheep-brain PATH` / `--fox-brain PATH` (a species with no path uses the rule brain); the
+checkpoint is a memoryless imitation-learning policy (`notebooks/imitation_learning/*.pt`, a
+`.pt` with a `state_dict` key). Under the hood the per-species brains are threaded through a
+`CompositeBrain` that routes each species to its own brain and fills unspecified species with a
+shared `RuleBrain` on the run RNG (so an all-rule run is byte-identical). Per species the
+`PolicyBrain` is: **CNN** over `obs.grids` → concat with an **MLP** over `obs.scalars`
+(health/hunger/thirst/energy/age/…) → feed-forward trunk → action heads (heading mean,
+eat/drink/repro gate logits, speed logit). It is **memoryless** (no LSTM, no critic) — each
+decision is a pure function of the current observation. The CNN ends in an adaptive pool so it
+accepts any window `K`. Torch is imported lazily, so the rule-brain path never needs it.
+**Deployment acts deterministically (head means / gate thresholds) → draws zero randomness →
+runs stay reproducible** and does not perturb the numpy run-RNG the other systems consume.
 
-Per-agent **LSTM memory** lives in a per-slot table reset when a slot is recycled, detected
-via `entities.birth_id` (a monotonic per-animal id added to the SoA store). The *decision*
-still reads only the observation — `birth_id` is used solely for recurrent-state lifecycle.
+Training is **behavioural cloning** in `notebooks/imitation_learning/` (`collect` records the
+RuleBrain teacher across worlds → `train_sheep` / `train_fox` clone it into the per-species
+`SpeciesPolicy` → `evaluate` drops the clones into the real `Simulation`). Deploy:
+`run_experiment.py --sheep-brain notebooks/imitation_learning/sheep.pt --ticks 8000` (drive one
+or both species).
 
-Training (`train_neural_brain.py`) is **imitation warm-start → recurrent PPO**:
-- **Reward vs pain** (explicit): reward = survive + energy/health gained + reproduce; pain =
-  hunger + thirst + energy/health lost + death. Net signal = reward − pain.
-- **Warm-start**: a `RecordingRuleBrain` teacher runs the sim; the net clones its actions (BC)
-  and regresses its critic onto the reward−pain returns, so it starts competent.
-- **Sleep consolidation** (default): collect through the day, run the PPO update when the
-  population falls asleep (edge-triggered on the sleeping fraction) — `--fixed-horizon` opts
-  out. Sleep-overridden ticks are masked out of the policy loss.
-- Recurrent PPO uses **stored-hidden replay** (each truncated-BPTT window keeps the LSTM state
-  that entered it), per-agent trajectories keyed by `birth_id`, and a `max_agents` memory cap.
-- **Checkpoints** to `--out` are atomic and resume automatically on the next run (skipping the
-  warm-start). Train: `train_neural_brain.py --iters 200 --out runs/brain.pt`; deploy:
-  `run_experiment.py --sheep-brain runs/brain.pt --fox-brain runs/brain.pt --ticks 8000`
-  (or drive just one species, e.g. `--sheep-brain notebooks/imitation_learning/sheep.pt`).
+> **Archived:** the older recurrent CNN+MLP+**LSTM** actor-critic (`NeuralBrain`) and its RL
+> trainer (imitation warm-start → recurrent PPO, `train_neural_brain.py`) are detached under
+> `backup/` and no longer deployable — see `backup/README.md` to restore them.
 
 ## Calibration notes (predator–prey is fragile — see v1.md §18)
 
