@@ -2,18 +2,18 @@
 
 Shares the exact same sim/ core as run_experiment.py. Usage:
     python run_live.py [--world-seed N] [--seed N] [--scale N] [--spf N]
-    python run_live.py --brain neural --weights runs/brain.pt   # watch the trained brain
+    python run_live.py --sheep-brain notebooks/imitation_learning/sheep.pt   # learned sheep
 
 ``--world-seed`` fixes the terrain/rivers; ``--seed`` fixes the run dynamics (omit for a
-random run on that world). ``--brain neural --weights PATH`` drives the animals with a
-trained neural brain instead of the hardcoded rule brain.
+random run on that world). ``--sheep-brain PATH`` / ``--fox-brain PATH`` drive that species
+with a trained brain; a species with no path stays on the hardcoded rule brain.
 """
 from __future__ import annotations
 
 import argparse
 
 from config import make_config
-from run_experiment import _make_brain
+from run_experiment import build_brain
 
 
 def main():
@@ -32,17 +32,21 @@ def main():
                          "when --monitor is set)")
     ap.add_argument("--monitor", action="store_true",
                     help="open a separate live window that plots the CSV as it is written")
-    ap.add_argument("--brain", choices=("rule", "neural"), default="rule",
-                    help="which brain drives the animals (default: the hardcoded rule brain)")
-    ap.add_argument("--weights", type=str, default=None,
-                    help="path to trained neural-brain weights (.pt); used with --brain neural")
-    ap.add_argument("--device", type=str, default="cpu", help="torch device for --brain neural")
+    ap.add_argument("--sheep-brain", type=str, default=None,
+                    help="path to a trained sheep-brain checkpoint (.pt), e.g. "
+                         "notebooks/imitation_learning/sheep.pt; omit to drive sheep with the "
+                         "rule brain")
+    ap.add_argument("--fox-brain", type=str, default=None,
+                    help="path to a trained fox-brain checkpoint (.pt); omit to drive foxes "
+                         "with the rule brain")
+    ap.add_argument("--device", type=str, default="cpu",
+                    help="torch device for any neural brain (default cpu)")
     args = ap.parse_args()
 
     cfg = make_config(world_seed=args.world_seed, seed=args.seed)
-    # build the requested brain (None => Simulation uses its default RuleBrain); NeuralBrain is
-    # imported lazily inside _make_brain so the rule path never needs torch.
-    brain = _make_brain(args.brain, args.weights, cfg, args.device)
+    # build the per-species brain spec (None => Simulation uses its default RuleBrain for both);
+    # any neural brain is imported lazily inside build_brain so the rule path never needs torch.
+    brain = build_brain(args.sheep_brain, args.fox_brain, cfg, args.device)
     # import arcade lazily so headless environments without a display can still import
     # the sim package without pulling in OpenGL.
     from render.viewer import run

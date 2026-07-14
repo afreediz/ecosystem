@@ -20,7 +20,7 @@ from sim.environment import Environment
 from sim.entities import Entities
 from sim.grid import SpatialGrid
 from sim.perception import Perception
-from sim.brain import RuleBrain
+from sim.brain import RuleBrain, CompositeBrain
 from sim.systems.brain_system import BrainSystem
 from sim.systems import movement, consumption, metabolism, reproduction, vegetation, sleep
 from sim import genome as gn
@@ -56,7 +56,7 @@ class Simulation:
         # Brain contract (e.g. sim.neural_brain.NeuralBrain) can be injected. A brain that
         # keeps per-agent memory (the neural brain's LSTM) is given a handle on the entity
         # store via bind(), so it can reset an agent's memory when its slot is recycled.
-        self.brain = brain if brain is not None else RuleBrain(self.rng, self.cfg.sim.food_eat_threshold)
+        self.brain = self._resolve_brain(brain)
         if hasattr(self.brain, "bind"):
             self.brain.bind(self.entities)
         self.brain_system = BrainSystem(self.brain)
@@ -69,6 +69,32 @@ class Simulation:
         self.last_obs = None
 
         self._seed_population()
+
+    # ------------------------------------------------------------------ brain wiring
+    def _resolve_brain(self, brain):
+        """Turn the ``brain`` argument into a concrete Brain.
+
+        - ``None``        -> the default hardcoded RuleBrain (on the run RNG).
+        - a ``Brain``     -> used as-is (a single brain drives every species, back-compat).
+        - a ``dict``      -> a per-species spec ``{species_id: Brain | None}``: species mapped to
+          a Brain use it; species mapped to ``None`` fall back to a shared RuleBrain built here
+          on the run RNG (so its explore headings come from the single run Generator, per the
+          determinism contract). Wrapped in a ``CompositeBrain`` that routes per species.
+        """
+        if brain is None:
+            return RuleBrain(self.rng, self.cfg.sim.food_eat_threshold)
+        if isinstance(brain, dict):
+            rule = None
+            resolved = {}
+            for sid in (SHEEP, FOX):
+                b = brain.get(sid)
+                if b is None:
+                    if rule is None:
+                        rule = RuleBrain(self.rng, self.cfg.sim.food_eat_threshold)
+                    b = rule
+                resolved[sid] = b
+            return CompositeBrain(resolved)
+        return brain
 
     # ------------------------------------------------------------------ setup
     def _seed_population(self):
