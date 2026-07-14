@@ -74,7 +74,10 @@ A `PolicyBrain` implements the **same `Brain` contract** as `RuleBrain` and is a
 Brains are selected **per species** on `run_experiment.py` / `run_live.py` via
 `--sheep-brain PATH` / `--fox-brain PATH` (a species with no path uses the rule brain); the
 checkpoint is a memoryless imitation-learning policy (`notebooks/imitation_learning/*.pt`, a
-`.pt` with a `state_dict` key). Under the hood the per-species brains are threaded through a
+**self-contained TorchScript archive** — code + weights via `torch.jit.load`, so `sim/`
+defines no network class and the architecture lives ONLY in the notebook's `build_policy`;
+legacy `state_dict` blobs are converted by `notebooks/imitation_learning/convert_to_jit.py`).
+Under the hood the per-species brains are threaded through a
 `CompositeBrain` that routes each species to its own brain and fills unspecified species with a
 shared `RuleBrain` on the run RNG (so an all-rule run is byte-identical). Per species the
 `PolicyBrain` is: **CNN** over `obs.grids` → concat with an **MLP** over `obs.scalars`

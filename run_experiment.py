@@ -24,23 +24,25 @@ def _load_species_brain(path: str, species_id: int, device: str = "cpu"):
     """Load a per-species deployment brain from an imitation-learning checkpoint.
 
     The checkpoint is a memoryless behavioural-cloning policy from
-    ``notebooks/imitation_learning/`` (``*.pt`` with a ``state_dict`` key) -> a
-    ``sim.policy_brain.PolicyBrain`` for this species. It runs in eval / deterministic mode, so
-    it draws no randomness and keeps the run reproducible. Torch is imported lazily here so the
-    rule path never needs it installed.
+    ``notebooks/imitation_learning/`` -- a SELF-CONTAINED TorchScript archive (code +
+    weights, saved by ``common.save_model``), so no architecture class is needed to load
+    it -> a ``sim.policy_brain.PolicyBrain`` for this species. It runs in eval /
+    deterministic mode, so it draws no randomness and keeps the run reproducible. Torch is
+    imported lazily (inside ``sim.policy_brain``) so the rule path never needs it installed.
 
     (The older recurrent CNN+MLP+LSTM ``NeuralBrain`` and its RL trainer are archived under
     ``backup/`` and no longer deployable -- see ``backup/README.md``.)
     """
-    import torch
-    blob = torch.load(path, map_location=device)
-    if isinstance(blob, dict) and "state_dict" in blob:
-        from sim.policy_brain import policy_brain_from_blob
-        return policy_brain_from_blob(blob, species_id, device=device)
-    raise ValueError(
-        f"unrecognized brain checkpoint {path!r}: expected a memoryless imitation-learning "
-        f"policy (a '.pt' with a 'state_dict' key, e.g. notebooks/imitation_learning/"
-        f"{('sheep' if species_id == SHEEP else 'fox')}.pt)")
+    from sim.policy_brain import policy_brain_from_path
+    try:
+        return policy_brain_from_path(path, species_id, device=device)
+    except RuntimeError as e:
+        raise ValueError(
+            f"could not load brain checkpoint {path!r} as a TorchScript archive "
+            f"(expected e.g. notebooks/imitation_learning/"
+            f"{('sheep' if species_id == SHEEP else 'fox')}.pt). If this is a legacy "
+            f"state_dict checkpoint, re-export it with "
+            f"notebooks/imitation_learning/convert_to_jit.py. Original error: {e}") from e
 
 
 def build_brain(sheep_weights: str | None, fox_weights: str | None, device: str = "cpu"):

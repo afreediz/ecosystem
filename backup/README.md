@@ -10,8 +10,8 @@ imitation-learning policy (`sim/policy_brain.py` + `notebooks/imitation_learning
   at the repo root.
 
 Nothing in the live codebase imports these anymore. `run_experiment.py` / `run_live.py` now only
-load imitation-learning `PolicyBrain` checkpoints (a `state_dict` key), so the old recurrent
-`runs/brain.pt` checkpoints can no longer be deployed while these are archived.
+load imitation-learning `PolicyBrain` checkpoints (self-contained TorchScript archives), so the
+old recurrent `runs/brain.pt` checkpoints can no longer be deployed while these are archived.
 
 ## To restore
 
