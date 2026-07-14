@@ -283,8 +283,9 @@ def build_policy(sid, hidden=128, cnn_feat=128, scalar_feat=32):
 
         A CNN over the egocentric grids + MLP over the scalars feed a plain feed-forward trunk
         (adaptive pool, so it accepts any window K); no LSTM and no critic -- this is supervised
-        imitation, not RL.  Matches ``sim.policy_brain.SpeciesPolicy`` layer-for-layer so a
-        checkpoint saved here loads there for deployment.
+        imitation, not RL.  This is the ONLY definition of the architecture: ``save_model``
+        exports it as a self-contained TorchScript archive, so deployment
+        (``sim.policy_brain``) never rebuilds the class.
         Heads: a 2-D heading mean (regressed), 3 gate logits + 1 speed logit (classified).
         """
 
@@ -463,25 +464,34 @@ def train_policy(sid, d, device="cuda", epochs=25, batch_size=512, lr=1e-3,
 
 
 def save_model(sid, model, path=None, meta=None):
+    """Save one species' policy as a SELF-CONTAINED TorchScript archive (code + weights).
+
+    ``torch.jit.script`` (not trace) is used so variable batch size and window ``K`` keep
+    working. Deployment (``sim.policy_brain``) just ``torch.jit.load``s the file -- no
+    architecture class needed anywhere outside ``build_policy``. Species / channel info
+    rides along as ``meta.json`` inside the archive."""
     torch, _, _ = _make_torch()
+    import json
     path = MODEL_PATHS[sid] if path is None else Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    blob = {"species": sid, "n_channels": SPECIES_N_CHANNELS[sid],
-            "state_dict": model.state_dict(), "meta": meta or {}}
+    scripted = torch.jit.script(model.eval())
+    extra = {"meta.json": json.dumps({"species": sid,
+                                      "n_channels": SPECIES_N_CHANNELS[sid],
+                                      "meta": meta or {}})}
     tmp = f"{path}.tmp"
-    torch.save(blob, tmp)
+    torch.jit.save(scripted, tmp, _extra_files=extra)
     import os
     os.replace(tmp, path)
     return path
 
 
 def load_model(sid, path=None, device="cpu"):
+    """Load a TorchScript policy archive; the file carries its own network code, so this
+    works for any architecture ``save_model`` wrote (no ``build_policy`` call)."""
     torch, _, _ = _make_torch()
     path = MODEL_PATHS[sid] if path is None else Path(path)
     dev = torch.device(device if torch.cuda.is_available() or device == "cpu" else "cpu")
-    blob = torch.load(path, map_location=dev)
-    model = build_policy(sid, hidden=128).to(dev)
-    model.load_state_dict(blob["state_dict"])
+    model = torch.jit.load(str(path), map_location=dev)
     model.eval()
     return model
 

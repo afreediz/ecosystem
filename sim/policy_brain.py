@@ -7,10 +7,13 @@ feed-forward policy, so there is no per-agent recurrent state and no ``birth_id`
 (A fuller recurrent CNN+MLP+**LSTM** actor-critic and its RL trainer were archived under
 ``backup/`` when deployment moved to these imitation-learning policies.)
 
-The network here mirrors the notebook's ``SpeciesPolicy`` front-end exactly (same conv stack +
-adaptive pool + trunk + heads and the same submodule names), so a checkpoint saved by the
-notebook loads straight into it by ``state_dict``. Torch is imported lazily by the callers, so
-the rule path never needs it.
+Checkpoints are SELF-CONTAINED TorchScript archives (saved by the notebook's
+``common.save_model`` via ``torch.jit.script``): the file carries the network code + weights,
+so ``torch.jit.load`` reconstructs the policy without any architecture class here. The only
+contract is the interface ``model(grids, scalars) -> (head_mean, gate_logits, speed_logit)``
+-- the architecture itself is defined once, in the training notebook, and can change freely
+without touching ``sim/``. Torch is imported lazily by the callers, so the rule path never
+needs it.
 
 Each policy is per-species and independent: build one ``PolicyBrain`` per checkpoint (holding a
 single species' network) and route species to it via ``CompositeBrain`` (see ``sim/brain.py``),
@@ -24,11 +27,8 @@ from __future__ import annotations
 
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 
 from sim.brain import ACT_DIM, Brain
-from sim.perception import SCALAR_DIM, SPECIES_N_CHANNELS
 
 # action columns (shared with sim/brain.py): heading (0:2), gates eat/drink/repro (2:5), speed (5)
 _A_HEAD = slice(0, 2)
@@ -36,49 +36,13 @@ _A_GATES = slice(2, 5)
 _A_SPEED = 5
 
 
-class SpeciesPolicy(nn.Module):
-    """Memoryless behavioural-cloning policy: CNN(grids) + MLP(scalars) -> action heads.
-
-    A CNN over the egocentric grids + MLP over the scalar vector feed a feed-forward trunk (the
-    adaptive pool lets it accept any window ``K``); there is no LSTM and no critic. Heads: a 2-D
-    heading mean (regressed), 3 gate logits
-    + 1 speed logit (classified). Layer sizes/names match the notebook so checkpoints load."""
-
-    def __init__(self, n_channels: int, hidden: int = 128, cnn_feat: int = 128,
-                 scalar_feat: int = 32):
-        super().__init__()
-        self.conv = nn.Sequential(
-            nn.Conv2d(n_channels, 16, 3, stride=2, padding=1), nn.ReLU(inplace=True),
-            nn.Conv2d(16, 32, 3, stride=2, padding=1), nn.ReLU(inplace=True),
-            nn.Conv2d(32, 32, 3, stride=2, padding=1), nn.ReLU(inplace=True),
-            nn.AdaptiveAvgPool2d((4, 4)),
-        )
-        self.cnn_fc = nn.Linear(32 * 4 * 4, cnn_feat)
-        self.scalar_mlp = nn.Sequential(
-            nn.Linear(SCALAR_DIM, scalar_feat), nn.ReLU(inplace=True),
-            nn.Linear(scalar_feat, scalar_feat), nn.ReLU(inplace=True),
-        )
-        self.trunk = nn.Sequential(
-            nn.Linear(cnn_feat + scalar_feat, hidden), nn.ReLU(inplace=True),
-        )
-        self.head_mean = nn.Linear(hidden, 2)
-        self.head_gates = nn.Linear(hidden, 3)
-        self.head_speed = nn.Linear(hidden, 1)
-
-    def forward(self, grids, scalars):
-        c = self.conv(grids).flatten(1)
-        c = F.relu(self.cnn_fc(c))
-        s = self.scalar_mlp(scalars)
-        z = self.trunk(torch.cat([c, s], dim=1))
-        return self.head_mean(z), self.head_gates(z), self.head_speed(z)
-
-
 class PolicyBrain(Brain):
     """Runs one or more memoryless per-species policies behind the ``Brain`` contract.
 
-    ``models`` maps species id -> ``SpeciesPolicy``. Only species present are decided; rows of
-    any absent species are left zero (compose with a ``RuleBrain`` via ``CompositeBrain`` to fill
-    them). Deterministic + memoryless, so no RNG is drawn."""
+    ``models`` maps species id -> any torch module (typically a loaded ``ScriptModule``)
+    implementing ``(grids, scalars) -> (head_mean, gate_logits, speed_logit)``. Only species
+    present are decided; rows of any absent species are left zero (compose with a ``RuleBrain``
+    via ``CompositeBrain`` to fill them). Deterministic + memoryless, so no RNG is drawn."""
 
     def __init__(self, models: dict, device: str = "cpu"):
         self.device = torch.device(device)
@@ -107,11 +71,10 @@ class PolicyBrain(Brain):
         return act
 
 
-def policy_brain_from_blob(blob: dict, species_id: int, device: str = "cpu") -> PolicyBrain:
-    """Build a single-species ``PolicyBrain`` from an already-loaded imitation-learning blob
-    (as saved by ``notebooks/imitation_learning/common.save_model``: keys ``n_channels`` /
-    ``state_dict``)."""
-    n_channels = int(blob.get("n_channels", SPECIES_N_CHANNELS[species_id]))
-    model = SpeciesPolicy(n_channels)
-    model.load_state_dict(blob["state_dict"])
-    return PolicyBrain({species_id: model}, device=device)
+def policy_brain_from_path(path: str, species_id: int, device: str = "cpu") -> PolicyBrain:
+    """Build a single-species ``PolicyBrain`` from a self-contained TorchScript checkpoint
+    (as saved by ``notebooks/imitation_learning/common.save_model``). The archive carries its
+    own network code, so no architecture class is needed -- ``torch.jit.load`` raises
+    ``RuntimeError`` on a non-TorchScript file (e.g. a legacy ``state_dict`` blob)."""
+    module = torch.jit.load(str(path), map_location=torch.device(device))
+    return PolicyBrain({species_id: module}, device=device)
