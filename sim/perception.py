@@ -11,12 +11,20 @@ canvas. Each grid channel is CNN-ready (the whole point of the grid design).
 Perception is **separated by species**: a species only carries the channels it actually
 uses, so there are no dead inputs for a future per-species CNN.
 
-  Sheep channels (5):  terrain | water | food (=grass field) | threat (=foxes) | mate
-  Fox   channels (4):  terrain | water | food (=exposed prey) | mate
+  Sheep channels (6):  terrain | water | food (=grass field) | threat (=foxes) | mate | dist
+  Fox   channels (5):  terrain | water | food (=exposed prey) | mate | dist
 
 The ``food`` channel is unified in position but species-specific in content: a herbivore's
 food is the vegetation field, a carnivore's food is prey entities. Foxes have no predators,
 so they carry no ``threat`` channel.
+
+The trailing POSITIONAL channel (``dist``) is common to every species: each cell's radial
+distance from the agent, masked by the agent's OWN vision disc exactly like the content
+channels and normalized. A translation-equivariant conv otherwise has no way to know how far
+a perceived cell lies -- which is exactly what "nearest"/"best" targeting needs -- so this
+channel supplies it. (Direction to a target is recovered downstream by the soft-argmax head's
+own coordinate readout, and the RuleBrain is isotropic, so distance is the whole positional
+signal; no x/y channel is carried.) The RuleBrain itself ignores it.
 
 ``build`` returns ``(obs_by_species, idx)``:
   * ``obs_by_species`` -- ``{species_id: Observation}``, each with that species' layout.
@@ -38,18 +46,35 @@ from config import Config, SHEEP, FOX
 from sim import genome as gn
 
 # --- per-species grid channel layouts ---
-# Sheep:
+# Content channels (species-specific) come first, then a common POSITIONAL block is appended
+# AFTER them (see below). Because the content indices never shift, the RuleBrain -- which
+# reads channels by fixed index -- is unaffected by the positional block.
+# Sheep content (5):
 SH_TERRAIN, SH_WATER, SH_FOOD, SH_THREAT, SH_MATE = range(5)
-SHEEP_N_CHANNELS = 5
-# Fox (no threat, food is prey entities):
+SHEEP_N_CONTENT = 5
+# Fox content (4) (no threat, food is prey entities):
 FX_TERRAIN, FX_WATER, FX_FOOD, FX_MATE = range(4)
-FOX_N_CHANNELS = 4
+FOX_N_CONTENT = 4
 
+# POSITIONAL channel -- common to every species, appended after the content channels: the
+# radial DISTANCE of each cell from the agent, masked by the agent's OWN vision disc (the same
+# mask as the content channels) and normalized. A plain conv is translation-equivariant and
+# otherwise cannot know how far a perceived cell is -- exactly what "nearest"/"best" targeting
+# needs (both are functions of distance alone). No x/y channel is carried: the soft-argmax head
+# recovers the *direction* to a target from its own coordinate readout, and the RuleBrain is
+# isotropic (nearest/best regardless of direction), so distance is the whole positional signal
+# to clone. The RuleBrain ignores this channel (it decodes its own targets).
+POS_DIST = 0                               # offset WITHIN the positional block
+N_POS_CHANNELS = 1
+SHEEP_N_CHANNELS = SHEEP_N_CONTENT + N_POS_CHANNELS      # 6
+FOX_N_CHANNELS = FOX_N_CONTENT + N_POS_CHANNELS          # 5
+
+_POS_NAMES = ("dist",)
 # channel names per species (index = position in that species' grid stack); used by the
 # viewer's perception inspector and as the single source of truth for the layouts.
 CHANNEL_NAMES = {
-    SHEEP: ("terrain", "water", "food", "threat", "mate"),
-    FOX:   ("terrain", "water", "food", "mate"),
+    SHEEP: ("terrain", "water", "food", "threat", "mate") + _POS_NAMES,
+    FOX:   ("terrain", "water", "food", "mate") + _POS_NAMES,
 }
 SPECIES_N_CHANNELS = {SHEEP: SHEEP_N_CHANNELS, FOX: FOX_N_CHANNELS}
 
@@ -101,6 +126,10 @@ class Perception:
         offs = np.arange(-self.R, self.R + 1)
         oy, ox = np.meshgrid(offs, offs, indexing="ij")
         self._d_cell = np.sqrt((ox * ox + oy * oy).astype(np.float32))   # dist from centre
+        # normalized positional stencil fed as the common POSITIONAL channel: radial distance
+        # in [0,1], kept ~[0,1]-scaled to match the content channels' range.
+        Rf = float(self.R)
+        self._pos_d = (self._d_cell / (float(np.sqrt(2.0)) * Rf)).astype(np.float32)
 
         # circular eye masks cached by integer radius r=0..R (m[r] = cells within r). An
         # agent uses the mask for round(its sensory_range), avoiding a per-agent recompute.
@@ -173,6 +202,11 @@ class Perception:
             grids[:n, FX_FOOD:FX_MATE + 1] = 0.0     # entity channels: zero before scatter
             self._scatter_prey(grids, n, px, py, cx, cy, sens, FX_FOOD)
             self._scatter_mates(grids, n, sp_idx, px, py, cx, cy, sens, sid, FX_MATE)
+
+        # --- positional channel (common): radial distance, masked to each agent's own vision
+        # disc exactly like the content channels above ---
+        base = SPECIES_N_CHANNELS[sid] - N_POS_CHANNELS
+        grids[:n, base + POS_DIST] = self._pos_d[None] * masks
 
         # --- scalars ---
         s = scalars

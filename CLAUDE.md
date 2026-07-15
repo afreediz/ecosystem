@@ -32,9 +32,16 @@ in behind the same contract with no sim rewrite.
   channels it uses, so a future per-species CNN has no dead inputs. `obs.grids` is
   `(N, C, K, K)` egocentric channels centred on each agent, with `K = 2*R+1` and
   `R = ceil(max sensory_range)`; cells beyond an agent's own `sensory_range` or off-world
-  are zeroed. Layouts: **sheep** = `terrain, water, food(=grass field), threat(=foxes),
-  mate` (5); **fox** = `terrain, water, food(=exposed prey), mate` (4). The `food` channel
-  is species-specific in content (grass for herbivores, prey for carnivores). `obs.scalars`
+  are zeroed. Layouts — content channels then a common **positional** channel appended after
+  them: **sheep** = `terrain, water, food(=grass field), threat(=foxes), mate` + `dist` (6);
+  **fox** = `terrain, water, food(=exposed prey), mate` + `dist` (5). The `food` channel is
+  species-specific in content (grass for herbivores, prey for carnivores). The positional
+  `dist` channel is each cell's radial distance from the agent, masked by the agent's own
+  vision disc like the content channels and normalized; it gives a CNN the distance a
+  translation-equivariant conv can't otherwise infer (nearest/best targeting needs only
+  distance — the soft-argmax head recovers direction from its own coordinate readout). The
+  `RuleBrain` ignores it (appended index, so its fixed channel indexing is unchanged).
+  `obs.scalars`
   is `(N, SCALAR_DIM=10)` internal state + global env. The grids are CNN-channel-ready (the
   whole point of the grid design); the `RuleBrain` decodes each species separately into
   nearest/best targets (`nearest_in_channel` / `best_in_channel` in `sim/brain.py`) since a
@@ -83,8 +90,12 @@ shared `RuleBrain` on the run RNG (so an all-rule run is byte-identical). Per sp
 `PolicyBrain` is: **CNN** over `obs.grids` → concat with an **MLP** over `obs.scalars`
 (health/hunger/thirst/energy/age/…) → feed-forward trunk → action heads (heading mean,
 eat/drink/repro gate logits, speed logit). It is **memoryless** (no LSTM, no critic) — each
-decision is a pure function of the current observation. The CNN ends in an adaptive pool so it
-accepts any window `K`. Torch is imported lazily, so the rule-brain path never needs it.
+decision is a pure function of the current observation. The CNN ends in a **spatial
+soft-argmax** head (`pool="softargmax"`, the default in `build_policy`): a per-feature-map
+softmax whose expected (x, y) coordinate + peak activation is the differentiable analog of
+the RuleBrain's "argmax over cells → coordinates", pairing with the positional `dist` channel
+above; it is window-`K` agnostic like the old `AdaptiveAvgPool2d` it replaces (still selectable
+via `pool="avg"` for A/B). Torch is imported lazily, so the rule-brain path never needs it.
 **Deployment acts deterministically (head means / gate thresholds) → draws zero randomness →
 runs stay reproducible** and does not perturb the numpy run-RNG the other systems consume.
 

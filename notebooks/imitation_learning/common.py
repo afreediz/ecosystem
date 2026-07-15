@@ -274,30 +274,56 @@ def _make_torch():
     return torch, nn, F
 
 
-def build_policy(sid, hidden=128, cnn_feat=128, scalar_feat=32):
-    """Construct the memoryless per-species policy network (see ``SpeciesPolicy``)."""
+def build_policy(sid, hidden=128, cnn_feat=128, scalar_feat=32, pool="softargmax"):
+    """Construct the memoryless per-species policy network (see ``SpeciesPolicy``).
+
+    ``pool`` selects how the conv feature map is reduced to a vector:
+      * ``"softargmax"`` (default) -- a spatial soft-argmax that reads out, per feature map,
+        the EXPECTED (x, y) location of its activation (in [-1,1]) plus a presence score. This
+        is the differentiable analog of "argmax over cells -> coordinates" -- the very thing
+        the RuleBrain computes when it decodes the nearest/best cell -- and it pairs with the
+        radial-distance positional channel perception now provides.
+      * ``"avg"`` -- the legacy ``AdaptiveAvgPool2d((4,4))`` + flatten (kept for A/B).
+    Both are window-size (K) agnostic.
+    """
     torch, nn, F = _make_torch()
 
     class SpeciesPolicy(nn.Module):
         """Memoryless behavioural-cloning policy: CNN(grids) + MLP(scalars) -> action heads.
 
-        A CNN over the egocentric grids + MLP over the scalars feed a plain feed-forward trunk
-        (adaptive pool, so it accepts any window K); no LSTM and no critic -- this is supervised
-        imitation, not RL.  This is the ONLY definition of the architecture: ``save_model``
-        exports it as a self-contained TorchScript archive, so deployment
-        (``sim.policy_brain``) never rebuilds the class.
+        A CNN over the egocentric grids is reduced to a feature vector (see ``pool``), concat
+        with an MLP over the scalars, then a plain feed-forward trunk -> action heads; no LSTM
+        and no critic -- this is supervised imitation, not RL.  This is the ONLY definition of
+        the architecture: ``save_model`` exports it as a self-contained TorchScript archive, so
+        deployment (``sim.policy_brain``) never rebuilds the class.
         Heads: a 2-D heading mean (regressed), 3 gate logits + 1 speed logit (classified).
+
+        SOFT-ARGMAX HEAD.  The conv stack ends WITHOUT a pool; ``_soft_argmax`` takes a spatial
+        softmax over each of the 32 feature maps and returns its expected (x, y) coordinate
+        plus the map's peak activation as a presence score -> a 3*32 vector. A learnable
+        inverse-temperature (softplus-positive) sharpens the softmax toward a hard argmax as
+        training proceeds. Average pooling smears a sparse target and loses its position, which
+        is why it is the wrong reduction for a "nearest target" policy; soft-argmax preserves it.
         """
 
-        def __init__(self, n_channels):
+        def __init__(self, n_channels, pool):
             super().__init__()
+            # bool drives the reduction branch; TorchScript infers its type from this
+            # assignment (a class-level annotation would be stringified by ``from __future__
+            # import annotations`` at module top and break jit.script).
+            self.use_avg = (pool == "avg")
             self.conv = nn.Sequential(
                 nn.Conv2d(n_channels, 16, 3, stride=2, padding=1), nn.ReLU(inplace=True),
                 nn.Conv2d(16, 32, 3, stride=2, padding=1), nn.ReLU(inplace=True),
                 nn.Conv2d(32, 32, 3, stride=2, padding=1), nn.ReLU(inplace=True),
-                nn.AdaptiveAvgPool2d((4, 4)),
             )
-            self.cnn_fc = nn.Linear(32 * 4 * 4, cnn_feat)
+            self._feat_ch = 32
+            self.avg_pool = nn.AdaptiveAvgPool2d((4, 4))       # used only when pool == "avg"
+            # learnable inverse-temperature for the soft-argmax (softplus keeps it > 0; the
+            # init value gives softplus(x) ~ 1.0, a neutral starting sharpness)
+            self.inv_temp_raw = nn.Parameter(torch.tensor([0.5413]))
+            cnn_in = self._feat_ch * 4 * 4 if self.use_avg else self._feat_ch * 3
+            self.cnn_fc = nn.Linear(cnn_in, cnn_feat)
             self.scalar_mlp = nn.Sequential(
                 nn.Linear(SCALAR_DIM, scalar_feat), nn.ReLU(inplace=True),
                 nn.Linear(scalar_feat, scalar_feat), nn.ReLU(inplace=True),
@@ -309,14 +335,33 @@ def build_policy(sid, hidden=128, cnn_feat=128, scalar_feat=32):
             self.head_gates = nn.Linear(hidden, 3)
             self.head_speed = nn.Linear(hidden, 1)
 
+        def _soft_argmax(self, f):
+            # f: (N, C, H, W) -> (N, 3C): expected x, expected y (in [-1,1]) + peak activation.
+            # Normalized coordinates make this window-size (K) agnostic, just like the old pool.
+            N = f.size(0); C = f.size(1); H = f.size(2); W = f.size(3)
+            flat = f.reshape(N, C, H * W)
+            conf = torch.max(flat, dim=2)[0]                          # (N, C) presence proxy
+            beta = F.softplus(self.inv_temp_raw)                      # > 0, sharpens the softmax
+            p = torch.softmax(flat * beta, dim=2)                     # (N, C, H*W)
+            xs = torch.linspace(-1.0, 1.0, W, device=f.device, dtype=f.dtype)
+            ys = torch.linspace(-1.0, 1.0, H, device=f.device, dtype=f.dtype)
+            gx = xs.reshape(1, W).expand(H, W).reshape(1, 1, H * W)   # x varies fastest (row-major)
+            gy = ys.reshape(H, 1).expand(H, W).reshape(1, 1, H * W)
+            ex = (p * gx).sum(dim=2)                                  # (N, C)
+            ey = (p * gy).sum(dim=2)                                  # (N, C)
+            return torch.cat([ex, ey, conf], dim=1)                   # (N, 3C)
+
         def forward(self, grids, scalars):
-            c = self.conv(grids).flatten(1)
-            c = F.relu(self.cnn_fc(c))
+            f = self.conv(grids)
+            if self.use_avg:
+                c = F.relu(self.cnn_fc(self.avg_pool(f).flatten(1)))
+            else:
+                c = F.relu(self.cnn_fc(self._soft_argmax(f)))
             s = self.scalar_mlp(scalars)
             z = self.trunk(torch.cat([c, s], dim=1))
             return self.head_mean(z), self.head_gates(z), self.head_speed(z)
 
-    return SpeciesPolicy(SPECIES_N_CHANNELS[sid])
+    return SpeciesPolicy(SPECIES_N_CHANNELS[sid], pool)
 
 
 def bc_loss(out, target, w_head=1.0, w_gate=1.0, w_speed=0.5,
@@ -382,7 +427,7 @@ def split_by_world(d, val_world):
 
 
 def train_policy(sid, d, device="cuda", epochs=25, batch_size=512, lr=1e-3,
-                 val_world=None, seed=0, verbose=True):
+                 val_world=None, seed=0, pool="softargmax", verbose=True):
     """GPU-batched behavioural cloning of one species' teacher.
 
     The whole dataset lives in CPU RAM as tensors (grids kept float16); each minibatch is
@@ -400,7 +445,7 @@ def train_policy(sid, d, device="cuda", epochs=25, batch_size=512, lr=1e-3,
     tr_idx = torch.from_numpy(tr_idx.astype(np.int64))
     val_idx = torch.from_numpy(val_idx.astype(np.int64))
 
-    model = build_policy(sid, hidden=128).to(dev)
+    model = build_policy(sid, hidden=128, pool=pool).to(dev)
     opt = torch.optim.Adam(model.parameters(), lr=lr)
     rng = np.random.default_rng(seed)
 
