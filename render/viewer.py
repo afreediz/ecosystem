@@ -16,6 +16,8 @@ Controls:
 """
 from __future__ import annotations
 
+import os
+
 import numpy as np
 from PIL import Image
 import arcade
@@ -34,6 +36,17 @@ MATING_COLOR = (255, 80, 150)
 MALE_MARK_COLOR = (0, 0, 0)
 # Ring drawn around the currently-selected (inspected) entity.
 SELECT_COLOR = (255, 230, 60)
+
+# --save-gif capture. A frame is grabbed at most once per drawn frame, and only after at
+# least ``_gif_stride`` sim ticks have advanced, so the GIF tracks sim time rather than the
+# render refresh rate. Each frame is downscaled to at most GIF_MAX_SIDE px on the long side
+# and palette-quantized immediately (GIFs are 256-color anyway) to keep memory small. The
+# buffer is capped at GIF_MAX_FRAMES by dropping every other stored frame and doubling the
+# stride, so the finished GIF always spans the WHOLE session at a temporal resolution that
+# fits in memory, however long the run.
+GIF_MAX_SIDE = 512
+GIF_MAX_FRAMES = 600
+GIF_PLAYBACK_FPS = 30
 
 # Perception-grid inspector: per-species (label, channel, base colour) lists -- each species
 # carries only the channels it uses, so the panel adapts to the selected agent. The base
@@ -59,7 +72,8 @@ class EcosystemViewer(arcade.Window):
     scale = 4
 
     def __init__(self, cfg: Config | None = None, scale: int = 4, steps_per_frame: float = 1.0,
-                 log_csv: str | None = None, monitor: bool = False, brain=None):
+                 log_csv: str | None = None, monitor: bool = False, brain=None,
+                 save_gif: str | None = None):
         cfg = cfg or Config()
         # brain is pluggable (rule brain by default, or a trained brain / per-species spec
         # passed in); the viewer stays an OBSERVER and never constructs the brain itself.
@@ -95,6 +109,14 @@ class EcosystemViewer(arcade.Window):
         win_h = min(self._content_h, max_h)
         super().__init__(win_w, win_h, "Ecosystem + Evolution (v1)", resizable=True)
         self.background_color = arcade.color.BLACK
+
+        # optional GIF recording of the visual run (see _capture_gif_frame / _save_gif).
+        # Frames are grabbed after each drawn frame while unpaused; on close they are written
+        # out as an animated GIF. Kept as pre-quantized PIL frames to bound memory.
+        self._gif_path = save_gif
+        self._gif_frames: list[Image.Image] = []
+        self._gif_stride = 1          # capture every Nth advanced tick (grows if we overflow)
+        self._gif_tick_accum = 0      # ticks advanced since the last captured frame
 
         self.paused = False
         self.steps_per_frame = float(steps_per_frame)
@@ -189,6 +211,7 @@ class EcosystemViewer(arcade.Window):
         self._step_accum -= n
         for _ in range(n):
             self.sim.step()
+            self._gif_tick_accum += 1        # advance the GIF capture clock (see on_draw)
             if self._logger is not None:
                 self._logger.record()        # records only every log_every ticks
             # stop once either species dies out -- the predator-prey dynamics are over.
@@ -233,6 +256,10 @@ class EcosystemViewer(arcade.Window):
         self.gui_camera.use()
         self._draw_hud()
         self._draw_perception_inspector()
+
+        # grab this rendered frame for the GIF (after everything is drawn, before the next
+        # clear) once enough sim ticks have elapsed. Cheap no-op unless --save-gif is set.
+        self._maybe_capture_gif_frame()
 
     def _draw_selection_ring(self) -> None:
         slot = self._selected_slot
@@ -514,16 +541,56 @@ class EcosystemViewer(arcade.Window):
         elif key == arcade.key.ESCAPE:
             self.close()
 
+    # ------------------------------------------------------------------ gif capture
+    def _maybe_capture_gif_frame(self) -> None:
+        """Store the current framebuffer as a GIF frame if recording and due.
+
+        Gated on ``_gif_tick_accum`` so the GIF advances with the simulation, not the
+        (much faster) render loop. When the buffer fills, halve it in place and double the
+        stride so the recording keeps spanning the whole run within GIF_MAX_FRAMES.
+        """
+        if self._gif_path is None or self._gif_tick_accum < self._gif_stride:
+            return
+        self._gif_tick_accum = 0
+
+        img = arcade.get_image().convert("RGB")
+        long_side = max(img.size)
+        if long_side > GIF_MAX_SIDE:
+            f = GIF_MAX_SIDE / long_side
+            img = img.resize((max(1, int(img.width * f)), max(1, int(img.height * f))),
+                             Image.BILINEAR)
+        # quantize now (GIFs are <=256 colours) so the retained buffer stays small
+        self._gif_frames.append(img.quantize(colors=256, method=Image.MEDIANCUT))
+
+        if len(self._gif_frames) >= GIF_MAX_FRAMES:
+            self._gif_frames = self._gif_frames[::2]   # keep every other frame
+            self._gif_stride *= 2                       # ... and capture half as often
+
+    def _save_gif(self) -> None:
+        if self._gif_path is None or not self._gif_frames:
+            return
+        directory = os.path.dirname(self._gif_path)
+        if directory:
+            os.makedirs(directory, exist_ok=True)
+        # each stored frame now represents _gif_stride sim ticks; play them at a steady rate.
+        duration_ms = int(1000 / GIF_PLAYBACK_FPS)
+        self._gif_frames[0].save(
+            self._gif_path, save_all=True, append_images=self._gif_frames[1:],
+            duration=duration_ms, loop=0, optimize=False, disposal=2)
+        print(f"saved {len(self._gif_frames)} frames -> {self._gif_path}")
+
     def on_close(self):
         # flush the CSV so the final ticks are on disk; leave the monitor process alone so
         # its window stays up for inspection after the sim window closes.
         if self._logger is not None:
             self._logger.close()
+        self._save_gif()
         super().on_close()
 
 
 def run(cfg: Config | None = None, scale: int = 4, steps_per_frame: float = 1.0,
-        log_csv: str | None = None, monitor: bool = False, brain=None):
+        log_csv: str | None = None, monitor: bool = False, brain=None,
+        save_gif: str | None = None):
     EcosystemViewer(cfg, scale=scale, steps_per_frame=steps_per_frame,
-                    log_csv=log_csv, monitor=monitor, brain=brain)
+                    log_csv=log_csv, monitor=monitor, brain=brain, save_gif=save_gif)
     arcade.run()
