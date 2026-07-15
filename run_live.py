@@ -6,7 +6,8 @@ Shares the exact same sim/ core as run_experiment.py. Usage:
 
 ``--world-seed`` fixes the terrain/rivers; ``--seed`` fixes the run dynamics (omit for a
 random run on that world). ``--sheep-brain PATH`` / ``--fox-brain PATH`` drive that species
-with a trained brain; a species with no path stays on the hardcoded rule brain.
+with a trained brain; a species with no path stays on the hardcoded rule brain. ``--save-gif
+PATH`` records the visual run to an animated GIF, written when the window closes.
 """
 from __future__ import annotations
 
@@ -41,6 +42,9 @@ def main():
                          "with the rule brain")
     ap.add_argument("--device", type=str, default="cpu",
                     help="torch device for any neural brain (default cpu)")
+    ap.add_argument("--save-gif", type=str, default=None,
+                    help="record the visual run to this animated GIF (written on window "
+                         "close), e.g. runs/live.gif")
     args = ap.parse_args()
 
     cfg = make_config(world_seed=args.world_seed, seed=args.seed)
@@ -56,7 +60,7 @@ def main():
     # the sim package without pulling in OpenGL.
     from render.viewer import run
     run(cfg, scale=args.scale, steps_per_frame=args.spf,
-        log_csv=args.log_csv, monitor=args.monitor, brain=brain)
+        log_csv=args.log_csv, monitor=args.monitor, brain=brain, save_gif=args.save_gif)
 
 
 if __name__ == "__main__":
