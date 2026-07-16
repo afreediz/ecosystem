@@ -1,5 +1,7 @@
 - Implement mate selection neurons
+- Implement Seperate brain for social groups : scratchpad/NOTES.md[Social group brain]
 - Implement Same specie channel and introduct cooperative-competative dynamics - territory, group hunting, etc.
+- Implement communication: 
 - New items: rocks (blocks vision), tree (sufficent height to eat + collapse after lifetime)
 - Implement new species including: in ocean (fish, amphibians), in depths (ants)
-- More action spaces: swim, dig, move, take, place, etc - a true interactable surrounding
+- More action spaces: swim, dig, move, take, place, etc - a true interactable surrounding + affects gene.
