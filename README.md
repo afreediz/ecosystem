@@ -1,32 +1,78 @@
-# Ecosystem + Evolution Simulation (v1)
+# darwinism — an ecosystem + evolution simulation framework
 <img src="highlights/demo.gif" alt="Demo" width="800">
-A headless, deterministic ecosystem simulation on a noise-generated world with biomes,
-hydrology, weather and seasons. Plants, sheep and foxes act through a
-`brain.decide(observation) -> action` contract, carry a heritable genome, and perceive
-only their **local** surroundings — so evolution and predator–prey dynamics emerge and
-can be measured.
 
-This is **v1**: the brain is hardcoded rules, but the architecture around it (batched
-brain system, per-species egocentric perception **grids** + scalar schemas, SoA entity
-store) is built so a PyTorch neural brain can be dropped in later with **zero sim rewrite**.
+A headless, deterministic ecosystem simulation on a noise-generated world with biomes,
+hydrology, weather and seasons. Animals act through a `brain.decide(observation) -> action`
+contract, carry a heritable genome, and perceive only their **local** surroundings — so
+evolution and predator–prey dynamics emerge and can be measured.
+
+`darwinism` is a **framework, not just an app**: `import darwinism`, compose a `Config`, and
+build around four extension points — **species**, **brains**, **tick-systems**, and heritable
+**traits** — without editing the core. The default world ships two species (sheep + fox) on a
+hardcoded rule brain, but the architecture around it (batched brain system, per-species
+egocentric perception **grids** + scalar schemas, SoA entity store) is built so a PyTorch
+neural brain drops in behind the same contract with **zero sim rewrite**.
+
+## Quickstart
+
+```python
+import darwinism as dw
+
+cfg = dw.make_config(world_seed=12345, seed=7)   # world seed + run seed (both reproducible)
+sim = dw.Simulation(cfg)                          # default RuleBrain drives every species
+for _ in range(9000):
+    stats = sim.step()
+print(sim.populations)                            # {'sheep': ..., 'fox': ...}
+```
+
+**Extending it** — add a species, a tick-system, a trait, or a brain, all as composition. See
+**[EXTENDING.md](EXTENDING.md)** and runnable **[`examples/`](examples/)**:
+
+```python
+RABBIT = 2
+cfg.species[RABBIT] = dw.SpeciesConfig(
+    name="rabbit", species_id=RABBIT, init_count=90,
+    diet=[dw.FieldFood("vegetation", eat_value=0.7)],       # herbivore
+    gene_ranges={"max_speed": dw.GeneRange(0.8, 2.2), "burrow_depth": dw.GeneRange(0, 1), ...},
+)
+sim = dw.Simulation(cfg, systems=[*dw.default_pipeline(cfg), MyDiseaseSystem()],
+                    brain={RABBIT: MyBrain()})
 
 ## Documentation
 
+- **[EXTENDING.md](EXTENDING.md)** — the framework guide: add species / brains / tick-systems /
+  traits, and the determinism rules to respect. Runnable versions in **[`examples/`](examples/)**.
 - **[docs/v1/OVERVIEW.md](docs/v1/OVERVIEW.md)** — the "what & why": features, algorithms,
   the reasoning behind each choice, and all metrics/thresholds (world, atmosphere,
   vegetation, entities, genome, perception, brain, sleep).
 - **[docs/v1/TECHNICAL.md](docs/v1/TECHNICAL.md)** — the "how it's coded": file structure,
   recurring code patterns, and the per-module API (classes, functions, signatures).
-- **[v1.md](v1.md)** — the original authoritative build spec.
+- **[docs/v1/v1.md](docs/v1/v1.md)** — the original authoritative build spec.
 - **[CLAUDE.md](CLAUDE.md)** — working guidance + predator–prey calibration notes.
 
 ## Install
 
+`darwinism` is GitHub-installable. The core (headless simulator) needs only `numpy` +
+`opensimplex`; heavy pieces are optional extras that mirror the code's lazy-import boundaries.
+
+```bash
+pip install "git+https://github.com/afreediz/darwinism.git"           # core, headless
+pip install "darwinism[render] @ git+https://github.com/afreediz/darwinism.git"   # + Arcade viewer
+pip install "darwinism[torch]  @ git+https://github.com/afreediz/darwinism.git"   # + learned PolicyBrain
+```
+
+Extras: `analysis` (pandas + matplotlib for the CSV report), `render` (Arcade viewer),
+`torch` (learned policies), `dev` (pytest, ruff, import-linter), `all`. For local development:
+
 ```bash
 python -m venv venv
 venv/Scripts/activate          # Windows;  source venv/bin/activate on Unix
-pip install -r requirements.txt
+pip install -e ".[all,dev]"
 ```
+
+Installing adds two console scripts, `darwinism-run` (headless) and `darwinism-live` (viewer);
+`python -m darwinism [run|live]` and the root `run_experiment.py` / `run_live.py` shims are
+equivalent.
 
 ## Run
 
@@ -34,15 +80,15 @@ pip install -r requirements.txt
 
 ```bash
 # default world, random run
-python run_live.py                              
+darwinism-live
 
 # with world configs
-python run_live.py --world-seed 12345 --seed 7 --scale 5 --spf 4
+darwinism-live --world-seed 12345 --seed 7 --scale 5 --spf 4
 
 # with trained pytorch brains
-python run_live.py  --world-seed 1 --seed 7 
- --sheep-brain notebooks\imitation_learning\sheep.pt 
- --fox-brain notebooks\live_learning\offline\fox_offline_ppo.pt 
+darwinism-live --world-seed 1 --seed 7 \
+ --sheep-brain notebooks/imitation_learning/sheep.pt \
+ --fox-brain notebooks/live_learning/offline/fox_offline_ppo.pt \
  --device cuda
 ```
 
@@ -82,10 +128,10 @@ top-right panel showing its live perception grids (terrain / water / food / thre
 **Headless experiment** (fast-forward, writes CSV):
 
 ```bash
-python run_experiment.py --ticks 20000 --world-seed 12345 --seed 7 --out runs/run.csv
-python run_experiment.py --ticks 20000 --world-seed 12345    # random run on a fixed world
-python run_experiment.py --ticks 20000 --plot                # also render a PNG report
-python run_experiment.py --ticks 20000 --monitor             # watch the plots update live
+darwinism-run --ticks 20000 --world-seed 12345 --seed 7 --out runs/run.csv
+darwinism-run --ticks 20000 --world-seed 12345    # random run on a fixed world
+darwinism-run --ticks 20000 --plot                # also render a PNG report
+darwinism-run --ticks 20000 --monitor             # watch the plots update live
 ```
 
 `--world-seed` fixes the map; `--seed` fixes the run (omit for a random run — the resolved
@@ -95,7 +141,7 @@ written (default every 10 ticks). `--monitor` opens a separate live analysis win
 **Analysis** (population curves, trait drift, phase plot):
 
 ```bash
-python -m analysis.plots runs/run.csv --out analysis/out
+python -m darwinism.analysis.plots runs/run.csv --out analysis/out
 ```
 
 Each run produces a 4-panel report — population vs time, vegetation biomass, sheep trait
@@ -111,11 +157,11 @@ trait drift and the phase plot evolve while a run is still going.
 
 ```bash
 # automatic: launch the monitor alongside a run (spawned as its own process)
-python run_experiment.py --ticks 20000 --world-seed 12345 --seed 7 --monitor
-python run_live.py --world-seed 12345 --seed 7 --monitor
+darwinism-run --ticks 20000 --world-seed 12345 --seed 7 --monitor
+darwinism-live --world-seed 12345 --seed 7 --monitor
 
 # standalone: point it at ANY run CSV — one still being written, or a finished one
-python -m analysis.monitor runs/run.csv --interval 1.0
+python -m darwinism.analysis.monitor runs/run.csv --interval 1.0
 ```
 
 `--interval` sets the refresh period in seconds (default `1.0`). The monitor tolerates an
@@ -145,16 +191,28 @@ sim window closes independently and the monitor window stays open showing the fi
 ## Layout
 
 ```
-config.py            all tunables + world seed + run seed
-run_live.py          Arcade window entry point
-run_experiment.py    headless CSV entry point
-sim/                 headless core (world, hydrology, environment, entities,
-                     genome, perception, brain, grid, systems/)
-render/viewer.py     Arcade observer (never mutates the sim)
-analysis/            CSV logger + matplotlib plots + live monitor window
+pyproject.toml       packaging (hatchling; core + [render]/[torch]/[analysis]/[dev] extras)
+darwinism/           the package (flat layout)
+  __init__.py        public API (Simulation, Config, Brain, System, ...) + __version__
+  config.py          all tunables + world seed + run seed + declarative SpeciesConfig/diet
+  sim/               headless core (world, hydrology, environment, entities, genome,
+                     perception, brain, grid, systems/ incl. the pipeline registry)
+  render/viewer.py   Arcade observer (never mutates the sim)
+  analysis/          CSV logger + matplotlib plots + live monitor window
+  cli/               console-script entry points (experiment, live)
+examples/            runnable extension examples (species, system, brain)
+tests/               golden-master determinism suite + extension tests
+run_experiment.py / run_live.py   thin back-compat shims -> darwinism.cli
 ```
 
 ## Tick order (`Simulation.step`)
 
-`environment → grid rebuild → perception → brain → movement → consumption → metabolism →
-reproduction → vegetation → log`.
+The tick is an ordered list of `System` objects sharing a `StepContext` (see
+`darwinism.sim.systems.pipeline` and `dw.default_pipeline`):
+
+`environment → grid rebuild → perception → brain → sleep → movement → consumption →
+metabolism → reproduction → vegetation → stats`.
+
+Insert/replace/reorder systems via `Simulation(systems=...)` — but keep the RNG-drawing
+systems (movement, consumption, metabolism, reproduction) in their relative order, or the run
+changes. See [EXTENDING.md](EXTENDING.md).

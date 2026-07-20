@@ -52,10 +52,10 @@ import common as C                                              # noqa: E402  (s
 from common import (                                            # noqa: E402,F401
     REPO, DATA_DIR, build_policy, save_model, load_model, MODEL_PATHS,
 )
-from config import make_config, SHEEP, FOX, SPECIES_NAMES       # noqa: E402
-from sim.brain import ACT_DIM, Brain, RuleBrain                 # noqa: E402
-from sim.perception import SCALAR_DIM, SPECIES_N_CHANNELS       # noqa: E402
-from sim.simulation import Simulation                           # noqa: E402
+from darwinism.config import make_config, SHEEP, FOX, SPECIES_NAMES       # noqa: E402
+from darwinism.sim.brain import ACT_DIM, Brain, RuleBrain                 # noqa: E402
+from darwinism.sim.perception import SCALAR_DIM, SPECIES_N_CHANNELS       # noqa: E402
+from darwinism.sim.simulation import Simulation                           # noqa: E402
 
 # action-column layout of the 6-D action (shared with sim/brain.py)
 A_HEAD = slice(0, 2)      # dx, dy   (regressed)

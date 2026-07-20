@@ -16,8 +16,8 @@ env/
 
 # ---- Simulation / analysis output ----
 runs/
-tests/
 analysis/out/
+darwinism/analysis/out/
 *.csv
 *.mp4
 *.temp.*

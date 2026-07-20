@@ -1,0 +1,45 @@
+{
+  "meta": {
+    "world_seed": 12345,
+    "seeds": [
+      7,
+      99,
+      12345
+    ],
+    "ticks": 200,
+    "log_every": 1,
+    "note": "default sheep+fox config; frozen on pre-refactor code as the byte-identical baseline for the framework refactor"
+  },
+  "runs": {
+    "7": {
+      "csv_sha256": "655e118e547089a5e0370e1d920630a19dbc1d5fa96253ba54a8c8031aedfdf1",
+      "state_sha256": "f6de08035afe5b29d9d60894dce0abe492023e9bdee5846ae95119440f1fc242",
+      "final": {
+        "tick": 200,
+        "n_sheep": 339,
+        "n_fox": 22,
+        "veg_biomass": 1669.075
+      }
+    },
+    "99": {
+      "csv_sha256": "9c7e79b385e0f2f0a9ff6b2fab6f66cb80cce6f62f582c04c4000a60077fd82b",
+      "state_sha256": "fa3a1ddf21f29e9a3d0a2a54285693a96a834efd3d34f42caf3421c805714904",
+      "final": {
+        "tick": 200,
+        "n_sheep": 305,
+        "n_fox": 24,
+        "veg_biomass": 1739.635
+      }
+    },
+    "12345": {
+      "csv_sha256": "8690eebcfed9971db74ff97cbc5917b59b5b61906b0fd594ae910b686848748a",
+      "state_sha256": "51780c1f77b2ca56b683a664d7d348589aed830b915683bfc42230cd59090052",
+      "final": {
+        "tick": 200,
+        "n_sheep": 301,
+        "n_fox": 24,
+        "veg_biomass": 1662.346
+      }
+    }
+  }
+}
