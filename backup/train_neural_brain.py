@@ -423,7 +423,7 @@ class PPOTrainer:
     def _build_teacher_sim(self):
         # a RuleBrain with its OWN rng (decoupled from run determinism -- this is just data
         # collection); wrapped so its decisions are recorded for imitation.
-        rule = RuleBrain(np.random.default_rng(self.seed or 0), self.cfg.sim.food_eat_threshold)
+        rule = RuleBrain(np.random.default_rng(self.seed or 0))
         teacher = RecordingRuleBrain(rule, self.collector)
         return Simulation(self.cfg, brain=teacher)
 

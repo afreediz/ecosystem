@@ -96,7 +96,7 @@ def nearest_in_channel(chan: np.ndarray):
             np.where(present, dist, 0.0))
 
 
-def best_in_channel(chan: np.ndarray, thr: float):
+def best_in_channel(chan: np.ndarray):
     """Reduce a scalar-valued (N,K,K) channel (e.g. vegetation) to its BEST cell.
 
     Score = value - 0.02 * distance, over cells whose value exceeds ``thr`` -- i.e. the
@@ -108,7 +108,7 @@ def best_in_channel(chan: np.ndarray, thr: float):
     K = chan.shape[-1]
     ox, oy, dcell = _stencil(K)
     flat = chan.reshape(n, -1)
-    score = np.where(flat > thr, flat - 0.02 * dcell[None], -np.inf)
+    score = np.where(flat > _DEFAULT_FOOD_THR, flat - 0.02 * dcell[None], -np.inf)
     j = np.argmax(score, axis=1)
     ar = np.arange(n)
     present = np.isfinite(score[ar, j])
@@ -192,9 +192,8 @@ def _norm(dx, dy):
 class RuleBrain(Brain):
     """Vectorized priority arbitration over decoded perception grids (throwaway logic)."""
 
-    def __init__(self, rng: np.random.Generator, food_threshold: float = _DEFAULT_FOOD_THR):
+    def __init__(self, rng: np.random.Generator):
         self.rng = rng
-        self.food_thr = float(food_threshold)
 
     def decide(self, obs_by_species, idx) -> np.ndarray:
         n_global = idx.shape[0]
@@ -225,7 +224,7 @@ class RuleBrain(Brain):
         # --- decode the channels this species carries into nearest/best targets ---
         if obs.species == SHEEP:
             # herbivore: food is the best grass cell; threat is the nearest fox
-            food_p, food_dx, food_dy, food_dc = best_in_channel(grids[:, SH_FOOD], self.food_thr)
+            food_p, food_dx, food_dy, food_dc = best_in_channel(grids[:, SH_FOOD])
             wat_p, wat_dx, wat_dy, wat_dc = nearest_in_channel(grids[:, SH_WATER])
             mate_p, mate_dx, mate_dy, mate_dc = nearest_in_channel(grids[:, SH_MATE])
             thr_p, thr_dx, thr_dy, thr_dc = nearest_in_channel(grids[:, SH_THREAT])

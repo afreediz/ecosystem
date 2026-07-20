@@ -145,7 +145,7 @@ brains too) can detect slot recycling by a changed id.
 ```python
 def __init__(self, cfg=None, brain=None):
     ...
-    self.brain = brain if brain is not None else RuleBrain(self.rng, self.cfg.sim.food_eat_threshold)
+    self.brain = brain if brain is not None else RuleBrain(self.rng)
     if hasattr(self.brain, "bind"):
         self.brain.bind(self.entities)
     self.brain_system = BrainSystem(self.brain)
