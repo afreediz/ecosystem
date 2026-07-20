@@ -73,7 +73,7 @@ class PolicyBrain(Brain):
 
 def policy_brain_from_path(path: str, species_id: int, device: str = "cpu") -> PolicyBrain:
     """Build a single-species ``PolicyBrain`` from a self-contained TorchScript checkpoint
-    (as saved by ``notebooks/imitation_learning/common.save_model``). The archive carries its
+    (as saved by ``notebooks/common.save_model``). The archive carries its
     own network code, so no architecture class is needed -- ``torch.jit.load`` raises
     ``RuntimeError`` on a non-TorchScript file (e.g. a legacy ``state_dict`` blob)."""
     module = torch.jit.load(str(path), map_location=torch.device(device))
