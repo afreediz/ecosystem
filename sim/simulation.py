@@ -82,7 +82,7 @@ class Simulation:
           determinism contract). Wrapped in a ``CompositeBrain`` that routes per species.
         """
         if brain is None:
-            return RuleBrain(self.rng, self.cfg.sim.food_eat_threshold)
+            return RuleBrain(self.rng)
         if isinstance(brain, dict):
             rule = None
             resolved = {}
@@ -90,7 +90,7 @@ class Simulation:
                 b = brain.get(sid)
                 if b is None:
                     if rule is None:
-                        rule = RuleBrain(self.rng, self.cfg.sim.food_eat_threshold)
+                        rule = RuleBrain(self.rng)
                     b = rule
                 resolved[sid] = b
             return CompositeBrain(resolved)

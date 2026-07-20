@@ -514,7 +514,7 @@ ascending slot index is the simplest one that reproduces identically across runs
 
 `Simulation(cfg=None)` constructs the world (`World(cfg.world)` — world seed only, no RNG),
 environment, entity store, vegetation field, the three spatial grids, perception, the rule
-brain (`RuleBrain(rng, cfg.sim.food_eat_threshold)`) + brain system, and seeds the founding
+brain (`RuleBrain(rng)`) + brain system, and seeds the founding
 population. `make_rng()` resolves/records a random run seed if none was set. It owns the
 canonical tick. `step` stashes this tick's per-species observations on `self.last_obs`
 (captured **before** deaths are filtered, so each `Observation.idx` row still maps to its

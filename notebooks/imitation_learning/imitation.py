@@ -194,8 +194,7 @@ def collect_from_world(world_seed, run_seed, sub_seed, warmup, record_ticks, cap
     Returns ``{species_id: (grids, scalars, actions)}`` for this world.
     """
     cfg = make_config(world_seed=world_seed, seed=run_seed)
-    thr = cfg.sim.food_eat_threshold if food_thr is None else food_thr
-    rule = RuleBrain(np.random.default_rng(run_seed), thr)
+    rule = RuleBrain(np.random.default_rng(run_seed))
     rec = _ReservoirRecorder(rule, caps, np.random.default_rng(sub_seed))
     sim = Simulation(cfg, brain=rec)
 
