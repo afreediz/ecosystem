@@ -194,14 +194,8 @@ tests/               golden-master determinism suite + extension tests
 run_experiment.py / run_live.py   thin back-compat shims -> darwinism.cli
 ```
 
-## Tick order (`Simulation.step`)
+---
 
-The tick is an ordered list of `System` objects sharing a `StepContext` (see
-`darwinism.sim.systems.pipeline` and `dw.default_pipeline`):
+⭐ If you like this project, give it a star — it helps a lot and is much appreciated!
 
-`environment → grid rebuild → perception → brain → sleep → movement → consumption →
-metabolism → reproduction → vegetation → stats`.
-
-Insert/replace/reorder systems via `Simulation(systems=...)` — but keep the RNG-drawing
-systems (movement, consumption, metabolism, reproduction) in their relative order, or the run
-changes. See [EXTENDING.md](EXTENDING.md).
+### Made with ❤️ by Afreedi Z.
