@@ -58,7 +58,7 @@ from darwinism.sim.perception import SCALAR_DIM, Observation
 from darwinism.sim.simulation import Simulation
 from darwinism.sim.systems import StepContext, System, default_pipeline
 
-__version__ = "0.1.0"
+__version__ = "1.0.0"
 
 __all__ = [
     # config / world building

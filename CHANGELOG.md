@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) (0.x = the public API may still change).
 
-## [0.1.0] — 2026-07-21
+## [1.0.0] — 2026-07-21
 
 First framework release: the simulation is now an installable, importable package with
 documented extension points, while the default sheep + fox world stays **byte-identical** to
