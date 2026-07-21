@@ -37,6 +37,7 @@ cfg.species[RABBIT] = dw.SpeciesConfig(
 )
 sim = dw.Simulation(cfg, systems=[*dw.default_pipeline(cfg), MyDiseaseSystem()],
                     brain={RABBIT: MyBrain()})
+```
 
 ## Documentation
 
