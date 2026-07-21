@@ -1,17 +1,43 @@
-# darwinism — an ecosystem + evolution simulation framework
+# darwinism — a world for agents
 <img src="highlights/demo.gif" alt="Demo" width="800">
 
-A headless, deterministic ecosystem simulation on a noise-generated world with biomes,
-hydrology, weather and seasons. Animals act through a `brain.decide(observation) -> action`
-contract, carry a heritable genome, and perceive only their **local** surroundings — so
-evolution and predator–prey dynamics emerge and can be measured.
+A living **world for agents**. From a single seed `darwinism` grows a whole planet —
+**terrains and biomes** (ocean, rivers, forest, grassland, mountains), **hydrology**, and
+**weather and seasons** that cycle as virtual days pass — then turns animals loose in it to
+hunt, flee, drink, breed, and evolve. What comes out is data: population curves, predator–prey
+oscillations, and heritable trait drift over generations.
 
-`darwinism` is a **framework, not just an app**: `import darwinism`, compose a `Config`, and
-build around four extension points — **species**, **brains**, **tick-systems**, and heritable
-**traits** — without editing the core. The default world ships two species (sheep + fox) on a
-hardcoded rule brain, but the architecture around it (batched brain system, per-species
-egocentric perception **grids** + scalar schemas, SoA entity store) is built so a PyTorch
-neural brain drops in behind the same contract with **zero sim rewrite**.
+What makes it different:
+
+- 👁️ **Agents see through their own eyes.** Each animal perceives only its **local**
+  surroundings — food, threats, mates and water within its own heritable vision range, centred
+  on itself — as **egocentric perception grids**: pure numbers, ready to feed straight into a
+  neural network. No global "nearest target", no omniscience.
+- 🧠 **Brains are swappable.** Every decision flows through one
+  `brain.decide(observation) -> action` contract. The default world runs on hardcoded rules,
+  but a **PyTorch brain drops in behind the same contract with zero sim rewrite** — the whole
+  architecture is built for a learned CNN policy to take over.
+- 🧬 **Evolution is real, not scripted.** Every animal carries a **heritable genome** — speed,
+  vision range, metabolism, size, lifespan, aggression and more — **sampled from probability
+  distributions** rather than hardcoded. When two mates breed, each child's genes come from
+  **per-gene crossover of both parents plus gaussian mutation**, so traits drift and
+  populations adapt across generations. Natural selection you can actually chart.
+- ⏱️ **Time is yours to bend.** Fixed-`dt` ticks advance the virtual clock — days roll into
+  seasons, weather shifts — and you dial the pace: watch it unfold in real time, or
+  fast-forward generations of evolution in a headless batch.
+- 🎲 **Headless and deterministic.** Run it as a pure-numbers simulator with no display, or
+  watch it live in an Arcade window — the same core either way. Two seeds (world + run) make
+  **every run byte-for-byte reproducible**.
+
+**AI-friendly by design.** The building blocks are the kind machine learning speaks natively:
+perception arrives as **tensors** (CNN-ready egocentric channels), decisions come out as
+**continuous headings and probability gates** instead of hard branches, and genes are **sampled
+from probability distributions** and recombined with crossover + mutation. Everywhere a
+hardcoded rule sits today, a learned, differentiable model can slot in without a rewrite.
+
+And it's a **framework, not just an app**: `import darwinism`, compose a `Config`, and extend
+around four points — **species**, **brains**, **systems**, and heritable **traits** —
+without touching the core.
 
 ## Quickstart
 
