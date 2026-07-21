@@ -1,5 +1,5 @@
 # Ecosystem + Evolution Simulation (v1)
-<img src="demo.gif" alt="Demo" width="800">
+<img src="highlights/demo.gif" alt="Demo" width="800">
 A headless, deterministic ecosystem simulation on a noise-generated world with biomes,
 hydrology, weather and seasons. Plants, sheep and foxes act through a
 `brain.decide(observation) -> action` contract, carry a heritable genome, and perceive
