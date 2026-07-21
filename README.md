@@ -39,18 +39,6 @@ sim = dw.Simulation(cfg, systems=[*dw.default_pipeline(cfg), MyDiseaseSystem()],
                     brain={RABBIT: MyBrain()})
 ```
 
-## Documentation
-
-- **[EXTENDING.md](EXTENDING.md)** — the framework guide: add species / brains / tick-systems /
-  traits, and the determinism rules to respect. Runnable versions in **[`examples/`](examples/)**.
-- **[docs/v1/OVERVIEW.md](docs/v1/OVERVIEW.md)** — the "what & why": features, algorithms,
-  the reasoning behind each choice, and all metrics/thresholds (world, atmosphere,
-  vegetation, entities, genome, perception, brain, sleep).
-- **[docs/v1/TECHNICAL.md](docs/v1/TECHNICAL.md)** — the "how it's coded": file structure,
-  recurring code patterns, and the per-module API (classes, functions, signatures).
-- **[docs/v1/v1.md](docs/v1/v1.md)** — the original authoritative build spec.
-- **[CLAUDE.md](CLAUDE.md)** — working guidance + predator–prey calibration notes.
-
 ## Install
 
 `darwinism` is GitHub-installable. The core (headless simulator) needs only `numpy` +
