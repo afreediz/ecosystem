@@ -1,9 +1,9 @@
 # darwinism — a world for agents
 <img src="highlights/demo.gif" alt="Demo" width="800">
 
-A living **world for agents**. From a single seed `darwinism` grows a whole planet —
+A living **world for agents**, `darwinism` grows a whole planet —
 **terrains and biomes** (ocean, rivers, forest, grassland, mountains), **hydrology**, and
-**weather and seasons** that cycle as virtual days pass — then turns animals loose in it to
+**weather and seasons** that cycle as virtual days pass — then let agents in it to
 hunt, flee, drink, breed, and evolve.
 
 Build for AI:
