@@ -14,13 +14,12 @@ Build for AI:
   neural network. No global "nearest target", no omniscience.
 - **Brains are swappable.** Every decision flows through one
   `brain.decide(observation) -> action` contract. The default world runs on hardcoded rules,
-  but a **PyTorch brain drops in behind the same contract with zero sim rewrite** — the whole
-  architecture is built for a learned CNN policy to take over.
+  but a **PyTorch brain drops in behind the same contract with zero sim rewrite**
 - **Evolution is real, not scripted.** Every animal carries a **heritable genome** — speed,
   vision range, metabolism, size, lifespan, aggression and more — **sampled from probability
   distributions** rather than hardcoded. When two mates breed, each child's genes come from
   **per-gene crossover of both parents plus gaussian mutation**, so traits drift and
-  populations adapt across generations. Natural selection you can actually chart.
+  populations adapt across generations.
 - **Time is just another parameter.**, Configure `dt` so one real second can represent a second, a day, or even years of simulated time. Observe every moment interactively, or race through generations of evolution in high-speed, headless simulations.
 - **Headless and deterministic.** Run it as a pure-numbers simulator with no display, or
   watch it live in an Arcade window — the same core either way. Two seeds (world + run) make
