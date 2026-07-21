@@ -19,7 +19,6 @@ runs/
 tests/
 analysis/out/
 *.csv
-*.png
 *.mp4
 *.temp.*
 temp.*
