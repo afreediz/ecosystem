@@ -28,6 +28,7 @@ classifiers = [
 dependencies = [
     "numpy",
     "opensimplex",
+    "matplotlib",
 ]
 
 [project.optional-dependencies]
