@@ -1,5 +1,6 @@
 # darwinism — a world for agents
 <img src="highlights/demo.gif" alt="Demo" width="800">
+*( white dots - sheep, red dots - fox, green - vegetation, entity with black dot on top-right corner: male and without it is female )*
 
 A living **world for agents**, `darwinism` grows a whole planet —
 **terrains and biomes** (ocean, rivers, forest, grassland, mountains), **hydrology**, and
