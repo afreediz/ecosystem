@@ -10,7 +10,7 @@ import darwinism as dw
 
 cfg = dw.make_config(world_seed=12345, seed=7)
 sim = dw.Simulation(cfg)
-for _ in range(9000):
+for _ in range(5000):
     stats = sim.step()
 print(sim.populations)          # {'sheep': ..., 'fox': ...}
 ```

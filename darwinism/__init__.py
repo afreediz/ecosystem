@@ -11,7 +11,7 @@ Build around it by importing the public surface below:
 
     cfg = dw.make_config(world_seed=12345, seed=7)
     sim = dw.Simulation(cfg)                 # default RuleBrain for every species
-    for _ in range(9000):
+    for _ in range(5000):
         stats = sim.step()
     print(sim.populations)
 

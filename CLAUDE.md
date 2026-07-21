@@ -66,8 +66,8 @@ in behind the same contract with no sim rewrite.
 ## Run
 
 ```bash
-venv/Scripts/python.exe run_experiment.py --ticks 9000 --world-seed 12345 --seed 7 --out runs/run.csv --plot
-venv/Scripts/python.exe run_experiment.py --ticks 9000 --world-seed 12345   # random run, fixed world
+venv/Scripts/python.exe run_experiment.py --ticks 5000 --world-seed 12345 --seed 7 --out runs/run.csv --plot
+venv/Scripts/python.exe run_experiment.py --ticks 5000 --world-seed 12345   # random run, fixed world
 venv/Scripts/python.exe run_live.py --world-seed 12345 --seed 7 --scale 5 --spf 2  # needs a display
 venv/Scripts/python.exe -m analysis.plots runs/run.csv --out analysis/out
 ```
@@ -102,7 +102,7 @@ runs stay reproducible** and does not perturb the numpy run-RNG the other system
 Training is **behavioural cloning** in `notebooks/imitation_learning/` (`collect` records the
 RuleBrain teacher across worlds → `train_sheep` / `train_fox` clone it into the per-species
 `SpeciesPolicy` → `evaluate` drops the clones into the real `Simulation`). Deploy:
-`run_experiment.py --sheep-brain notebooks/imitation_learning/sheep.pt --ticks 8000` (drive one
+`run_experiment.py --sheep-brain notebooks/imitation_learning/sheep.pt --ticks 5000` (drive one
 or both species).
 
 > **Archived:** the older recurrent CNN+MLP+**LSTM** actor-critic (`NeuralBrain`) and its RL
@@ -153,7 +153,7 @@ Removing any one tends to collapse the predator. Keep them in mind before retuni
 
 With these, foxes **persist** (they no longer go extinct at the first deep trough) and the
 sheep stay bounded well below their cap, in sustained predator–prey oscillations. Verified to
-8000 ticks across seeds 12345/7/99: e.g. seed 12345 sheep ~150–350 & fox ~30–90; seed 99
+5000 ticks across seeds 12345/7/99: e.g. seed 12345 sheep ~150–350 & fox ~30–90; seed 99
 sheep ~300–400 & fox ~50–70 (exact levels are seed-dependent — wetter worlds carry more of
 both). The earlier symptom — sheep exploding to the cap while foxes stayed tiny — was the
 *downstream* effect of the predator going extinct; the cure was fox persistence (3/6/7), not

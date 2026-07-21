@@ -56,7 +56,7 @@ lint-imports          # enforces the architecture invariant below
 
 See **[EXTENDING.md](EXTENDING.md)** for how the extension points work, and **[CLAUDE.md](CLAUDE.md)**
 for the (fragile) predator–prey calibration notes — retune those constants gently and always
-re-run a long (8000-tick) simulation before trusting a change.
+re-run a long (5000-tick) simulation before trusting a change.
 
 ## Pull requests
 
