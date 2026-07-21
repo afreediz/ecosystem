@@ -218,6 +218,19 @@ run_experiment.py / run_live.py   thin back-compat shims -> darwinism.cli
 
 ---
 
+## License
+
+**darwinism Non-Commercial Research License v1.0** — see [LICENSE](LICENSE).
+
+Free to use, modify, and share for **personal, academic, research, and educational**
+purposes, with attribution ("darwinism by Afreedi Z. — github.com/afreediz"). Public
+derivatives of the core simulation must be shared back under the same license.
+
+**Commercial use requires a separate written agreement** — contact
+afreedisulfiker@gmail.com.
+
+---
+
 ⭐ If you like this project, give it a star — it helps a lot and is much appreciated!
 
 ### Made with ❤️ by Afreedi Z.

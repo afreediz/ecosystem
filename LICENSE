@@ -1,21 +1,60 @@
-MIT License
+darwinism Non-Commercial Research License 
+Copyright (c) 2026 Afreedi Z. (github.com/afreediz)
 
-Copyright (c) 2026 afreediz
+DEFINITIONS
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+"Software" means the darwinism ecosystem + evolution simulation source
+code, documentation, trained model checkpoints, and associated files in
+this repository.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+"Non-Commercial Use" means use for personal, academic, research, or
+educational purposes where no revenue, compensation, or commercial
+advantage is derived.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+"Commercial Use" means any use of the Software, in whole or in part, to
+provide a product, service, or feature that generates revenue —
+including SaaS platforms, APIs, paid tools, consulting engagements,
+game or simulation products, or any other monetized deployment.
+
+GRANT OF RIGHTS
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this Software to use, copy, modify, and distribute it solely for
+Non-Commercial Use, subject to the conditions below.
+
+CONDITIONS
+
+1. ATTRIBUTION (required for all uses)
+   All copies, derivatives, publications, blog posts, or public
+   deployments using this Software must prominently credit:
+     "darwinism by Afreedi Z. — github.com/afreediz"
+   This credit must appear in documentation, product pages, or any
+   public-facing material describing the feature or methodology.
+
+2. ACADEMIC CITATION (required for research use)
+   Any academic paper, thesis, or presentation using this Software must
+   cite this repository and its author in the references section.
+
+3. COMMERCIAL USE RESTRICTION
+   Commercial Use of this Software is strictly prohibited without a
+   separate written Commercial License Agreement signed by the author.
+   To obtain a commercial license, contact: afreedisulfiker@gmail.com
+
+4. NO SUBLICENSING
+   You may not sublicense, sell, or transfer commercial rights to any
+   third party without explicit written consent from the author.
+
+5. COPYLEFT ON DERIVATIVES
+   Any derivative work or improvement to the core simulation methodology
+   must be shared back under this same license (or a compatible one
+   approved by the author) if distributed publicly.
+
+DISCLAIMER
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+THE AUTHOR SHALL NOT BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING
+FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.

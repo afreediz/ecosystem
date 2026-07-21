@@ -8,13 +8,13 @@ version = "0.1.0"
 description = "A headless, deterministic ecosystem + evolution simulation framework."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = { file = "LICENSE" }
 authors = [{ name = "afreediz", email = "Afreedi@globalwebproduction.com" }]
 keywords = ["simulation", "evolution", "ecosystem", "predator-prey", "agent-based", "artificial-life"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
+    "License :: Other/Proprietary License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
