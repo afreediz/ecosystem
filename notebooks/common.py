@@ -42,8 +42,8 @@ REPO = find_repo()
 # imitation_learning/ (beside the collection code that writes them)
 DATA_DIR = Path(__file__).resolve().parent / "imitation_learning"
 
-from config import SHEEP, FOX                                   # noqa: E402
-from sim.perception import SCALAR_DIM, SPECIES_N_CHANNELS       # noqa: E402
+from darwinism.config import SHEEP, FOX                                   # noqa: E402
+from darwinism.sim.perception import SCALAR_DIM, SPECIES_N_CHANNELS       # noqa: E402
 
 MODEL_PATHS = {SHEEP: DATA_DIR / "sheep.pt", FOX: DATA_DIR / "fox.pt"}
 

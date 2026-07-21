@@ -55,8 +55,8 @@ for _p in (_LIVE, _NOTEBOOKS):
         sys.path.insert(0, str(_p))
 
 import ppo_live as P                              # noqa: E402  the live PPO engine (reused wholesale)
-from config import make_config, SHEEP, FOX, SPECIES_NAMES  # noqa: E402
-from sim.simulation import Simulation             # noqa: E402
+from darwinism.config import make_config, SHEEP, FOX, SPECIES_NAMES  # noqa: E402
+from darwinism.sim.simulation import Simulation             # noqa: E402
 
 import torch                                       # noqa: E402
 

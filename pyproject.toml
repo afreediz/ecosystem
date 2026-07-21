@@ -1,0 +1,75 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "darwinism"
+version = "0.1.0"
+description = "A headless, deterministic ecosystem + evolution simulation framework."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "afreediz", email = "Afreedi@globalwebproduction.com" }]
+keywords = ["simulation", "evolution", "ecosystem", "predator-prey", "agent-based", "artificial-life"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Life",
+]
+
+# Core: a headless, importable simulator needs only these. Everything heavy (OpenGL viewer,
+# torch policies, plotting) is an optional extra, mirroring the codebase's lazy-import boundaries.
+dependencies = [
+    "numpy",
+    "opensimplex",
+]
+
+[project.optional-dependencies]
+analysis = ["pandas", "matplotlib"]        # CSV logging report + plots
+render = ["arcade"]                         # Arcade observer window (needs a display)
+torch = ["torch"]                           # learned PolicyBrain (imitation-learning policies)
+dev = ["pytest", "pytest-cov", "ruff", "import-linter"]
+all = ["pandas", "matplotlib", "arcade", "torch"]
+
+[project.scripts]
+darwinism-run = "darwinism.cli.experiment:main"
+darwinism-live = "darwinism.cli.live:main"
+
+[project.urls]
+Homepage = "https://github.com/afreediz/darwinism"
+Repository = "https://github.com/afreediz/darwinism"
+
+[tool.hatch.build.targets.wheel]
+# Flat layout: the package folder lives at the repo root (not under src/).
+packages = ["darwinism"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+# The sim leans on NumPy vectorisation and a few deliberately dense expressions; keep lint
+# pragmatic rather than pedantic. B905/B007 are stylistic and predate the framework refactor.
+ignore = ["E501", "B008", "B905", "B007"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.importlinter]
+root_package = "darwinism"
+
+# Machine-enforce the architectural invariant that was previously only prose in CLAUDE.md:
+# the pure-numbers sim core must never import the renderer.
+[[tool.importlinter.contracts]]
+name = "sim core must not import render"
+type = "forbidden"
+source_modules = ["darwinism.sim"]
+forbidden_modules = ["darwinism.render"]

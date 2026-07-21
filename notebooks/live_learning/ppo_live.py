@@ -50,9 +50,9 @@ if str(_NOTEBOOKS) not in sys.path:
     sys.path.insert(0, str(_NOTEBOOKS))
 
 import common as C                                       # noqa: E402  (shared notebooks toolkit)
-from config import SHEEP, FOX                            # noqa: E402
-from sim import genome as gn                             # noqa: E402
-from sim.brain import (                                  # noqa: E402
+from darwinism.config import SHEEP, FOX                            # noqa: E402
+from darwinism.sim import genome as gn                             # noqa: E402
+from darwinism.sim.brain import (                                  # noqa: E402
     ACT_DIM, Brain, A_DX, A_DY, A_EAT, A_DRINK, A_REPRO, A_SPEED,
 )
 
