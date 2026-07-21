@@ -33,9 +33,17 @@ pip install -r requirements.txt
 **Watch live** (Arcade observer window):
 
 ```bash
-python run_live.py                              # default world, random run
+# default world, random run
+python run_live.py                              
+
+# with world configs
 python run_live.py --world-seed 12345 --seed 7 --scale 5 --spf 4
-ython run_live.py --sheep-brain notebooks\imitation_learning\sheep.pt --fox-brain notebooks\live_learning\offline\fox_offline_ppo.pt --device cuda --monitor --world-seed 1 --seed 7 # with trained pytorch brains
+
+# with trained pytorch brains
+python run_live.py  --world-seed 1 --seed 7 
+ --sheep-brain notebooks\imitation_learning\sheep.pt 
+ --fox-brain notebooks\live_learning\offline\fox_offline_ppo.pt 
+ --device cuda
 ```
 
 CLI flags: `--world-seed N` (terrain/rivers; same world-seed ⇒ identical map) · `--seed N`
