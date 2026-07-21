@@ -4,28 +4,25 @@
 A living **world for agents**. From a single seed `darwinism` grows a whole planet —
 **terrains and biomes** (ocean, rivers, forest, grassland, mountains), **hydrology**, and
 **weather and seasons** that cycle as virtual days pass — then turns animals loose in it to
-hunt, flee, drink, breed, and evolve. What comes out is data: population curves, predator–prey
-oscillations, and heritable trait drift over generations.
+hunt, flee, drink, breed, and evolve.
 
-What makes it different:
+Build for AI:
 
-- 👁️ **Agents see through their own eyes.** Each animal perceives only its **local**
+- **Agents see through their own eyes.** Each animal perceives only its **local**
   surroundings — food, threats, mates and water within its own heritable vision range, centred
   on itself — as **egocentric perception grids**: pure numbers, ready to feed straight into a
   neural network. No global "nearest target", no omniscience.
-- 🧠 **Brains are swappable.** Every decision flows through one
+- **Brains are swappable.** Every decision flows through one
   `brain.decide(observation) -> action` contract. The default world runs on hardcoded rules,
   but a **PyTorch brain drops in behind the same contract with zero sim rewrite** — the whole
   architecture is built for a learned CNN policy to take over.
-- 🧬 **Evolution is real, not scripted.** Every animal carries a **heritable genome** — speed,
+- **Evolution is real, not scripted.** Every animal carries a **heritable genome** — speed,
   vision range, metabolism, size, lifespan, aggression and more — **sampled from probability
   distributions** rather than hardcoded. When two mates breed, each child's genes come from
   **per-gene crossover of both parents plus gaussian mutation**, so traits drift and
   populations adapt across generations. Natural selection you can actually chart.
-- ⏱️ **Time is yours to bend.** Fixed-`dt` ticks advance the virtual clock — days roll into
-  seasons, weather shifts — and you dial the pace: watch it unfold in real time, or
-  fast-forward generations of evolution in a headless batch.
-- 🎲 **Headless and deterministic.** Run it as a pure-numbers simulator with no display, or
+- **Time is just another parameter.**, Configure `dt` so one real second can represent a second, a day, or even years of simulated time. Observe every moment interactively, or race through generations of evolution in high-speed, headless simulations.
+- **Headless and deterministic.** Run it as a pure-numbers simulator with no display, or
   watch it live in an Arcade window — the same core either way. Two seeds (world + run) make
   **every run byte-for-byte reproducible**.
 
