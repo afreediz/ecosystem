@@ -29,6 +29,7 @@ dependencies = [
     "numpy",
     "opensimplex",
     "matplotlib",
+    "pandas",
 ]
 
 [project.optional-dependencies]
