@@ -105,6 +105,10 @@ darwinism-live --world-seed 1 --seed 7 \
  --device cuda
 ```
 
+**Trained brains.** Ready-made brain checkpoints are available for download — see
+[scratchpad/MODELS.md](scratchpad/MODELS.md). Drop them in behind `--sheep-brain` /
+`--fox-brain` (needs the `[torch]` extra).
+
 CLI flags: `--world-seed N` (terrain/rivers; same world-seed ⇒ identical map) · `--seed N`
 (run dynamics; omit for a random run on that world) · `--scale N` (pixels per world cell) ·
 `--spf N` (sim steps per rendered frame; fractional ok, e.g. `0.25` = 1 step every 4 frames) ·
