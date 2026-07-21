@@ -136,7 +136,7 @@ python -m darwinism.analysis.plots runs/run.csv --out analysis/out
 Each run produces a 4-panel report — population vs time, vegetation biomass, sheep trait
 drift (the evolution signal), and the sheep–fox phase plot (the Lotka–Volterra loop):
 
-![Sample analysis report](analysis/out/demo_report.png)
+![Sample analysis report](highlights/analysisOut.png)
 
 ### Live monitor
 
